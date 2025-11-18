@@ -1,0 +1,90 @@
+version: "2"
+output:
+  formats:
+    text:
+      path: stdout
+linters:
+  enable:
+    - bodyclose
+    - funlen
+    - gochecknoinits
+    - gocyclo
+    - gosec
+  settings:
+    funlen:
+      lines: 60
+      statements: 40
+    goconst:
+      match-constant: false
+      min-len: 3
+      min-occurrences: 2
+      numbers: true
+      min: 2
+      max: 2
+      ignore-calls: false
+    gocyclo:
+      min-complexity: 15
+    gosec:
+      includes:
+        - G101
+        - G102
+        - G103
+        - G104
+        - G106
+        - G107
+        - G108
+        - G109
+        - G110
+        - G201
+        - G202
+        - G203
+        - G204
+        - G301
+        - G302
+        - G303
+        - G304
+        - G305
+        - G306
+        - G307
+        - G401
+        - G402
+        - G403
+        - G501
+        - G502
+        - G503
+        - G504
+        - G505
+        - G602
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - path: (.+)\.go$
+        text: gosec G601
+      - linters:
+          - goconst
+        path: (.+)_test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
