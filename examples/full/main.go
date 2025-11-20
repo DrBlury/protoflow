@@ -16,26 +16,39 @@ import (
 
 func main() {
 	ctx := context.Background()
-	logger := protoflow.NewSlogServiceLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+	logger := newExampleLogger()
+	svc := protoflow.NewService(buildConfig(), logger, ctx, buildDependencies())
 
-	deps := protoflow.ServiceDependencies{
-		Validator: sampleValidator{},
-		Outbox:    newMemoryOutbox(),
-		Middlewares: []protoflow.MiddlewareRegistration{
-			metricsMiddleware(),
-		},
-	}
+	registerHandlers(svc)
+	startSamplePublisher(ctx, svc)
+	runService(ctx, svc, logger)
+}
 
-	cfg := &protoflow.Config{
+func newExampleLogger() protoflow.ServiceLogger {
+	return protoflow.NewSlogServiceLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+}
+
+func buildConfig() *protoflow.Config {
+	return &protoflow.Config{
 		PubSubSystem:       "kafka",
 		KafkaBrokers:       []string{"localhost:9092"},
 		KafkaConsumerGroup: "full-example",
 		PoisonQueue:        "orders.poison",
 		RetryMaxRetries:    5,
 	}
+}
 
-	svc := protoflow.NewService(cfg, logger, ctx, deps)
+func buildDependencies() protoflow.ServiceDependencies {
+	return protoflow.ServiceDependencies{
+		Validator: sampleValidator{},
+		Outbox:    newMemoryOutbox(),
+		Middlewares: []protoflow.MiddlewareRegistration{
+			metricsMiddleware(),
+		},
+	}
+}
 
+func registerHandlers(svc *protoflow.Service) {
 	must(protoflow.RegisterProtoHandler(svc, protoflow.ProtoHandlerRegistration[*models.OrderCreated]{
 		Name:               "proto-created",
 		ConsumeQueue:       "orders.created",
@@ -94,7 +107,9 @@ func main() {
 			}, nil
 		},
 	}))
+}
 
+func startSamplePublisher(ctx context.Context, svc *protoflow.Service) {
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
 		defer ticker.Stop()
@@ -109,7 +124,9 @@ func main() {
 			}
 		}
 	}()
+}
 
+func runService(ctx context.Context, svc *protoflow.Service, logger protoflow.ServiceLogger) {
 	if err := svc.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("router stopped", err, protoflow.LogFields{"example": "full"})
 	}
