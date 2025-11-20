@@ -20,18 +20,25 @@ type ServiceLogger interface {
 	Trace(msg string, fields LogFields)
 }
 
-// EntryLogger models the subset of structured logger behaviour exposed by
-// loggers such as logrus.Entry that rely on WithField chaining and variadic log
-// method calls. Applications with loggers that match this shape can use
-// NewEntryServiceLogger to satisfy Protoflow's ServiceLogger without rewriting
-// their logging stack or depending on slog/watermill helpers.
+// EntryLogger represents the legacy non-generic entry adapter constraint. It
+// remains exported so existing code that referenced protoflow.EntryLogger keeps
+// compiling, but NewEntryServiceLogger now works with any logger that satisfies
+// EntryLoggerAdapter[T].
 type EntryLogger interface {
+	EntryLoggerAdapter[EntryLogger]
+}
+
+// EntryLoggerAdapter captures the capabilities required by
+// NewEntryServiceLogger. The constraint is generic so third-party entry-like
+// loggers (for example, loggers whose methods return their own concrete
+// interface type) can be used without additional wrappers.
+type EntryLoggerAdapter[T any] interface {
 	Error(args ...any)
 	Info(args ...any)
 	Debug(args ...any)
 	Trace(args ...any)
-	WithError(err error) EntryLogger
-	WithField(key string, value any) EntryLogger
+	WithError(err error) T
+	WithField(key string, value any) T
 }
 
 var logLevelMapping = map[slog.Level]slog.Level{
@@ -62,37 +69,37 @@ func NewWatermillServiceLogger(logger watermill.LoggerAdapter) ServiceLogger {
 // NewEntryServiceLogger wraps an EntryLogger (for example a logrus.Entry) so it
 // can be consumed by Protoflow services without forcing additional logging
 // adapters.
-func NewEntryServiceLogger(entry EntryLogger) ServiceLogger {
-	if entry == nil {
+func NewEntryServiceLogger[T EntryLoggerAdapter[T]](entry T) ServiceLogger {
+	if any(entry) == nil {
 		panic("protoflow: entry logger cannot be nil")
 	}
-	return &entryServiceLogger{entry: entry}
+	return &entryServiceLogger[T]{entry: entry}
 }
 
 type watermillServiceLogger struct {
 	inner watermill.LoggerAdapter
 }
 
-type entryServiceLogger struct {
-	entry EntryLogger
+type entryServiceLogger[T EntryLoggerAdapter[T]] struct {
+	entry T
 }
 
-func (e *entryServiceLogger) With(fields LogFields) ServiceLogger {
+func (e *entryServiceLogger[T]) With(fields LogFields) ServiceLogger {
 	if len(fields) == 0 {
 		return e
 	}
-	return &entryServiceLogger{entry: applyEntryFields(e.entry, fields)}
+	return &entryServiceLogger[T]{entry: applyEntryFields(e.entry, fields)}
 }
 
-func (e *entryServiceLogger) Debug(msg string, fields LogFields) {
+func (e *entryServiceLogger[T]) Debug(msg string, fields LogFields) {
 	applyEntryFields(e.entry, fields).Debug(msg)
 }
 
-func (e *entryServiceLogger) Info(msg string, fields LogFields) {
+func (e *entryServiceLogger[T]) Info(msg string, fields LogFields) {
 	applyEntryFields(e.entry, fields).Info(msg)
 }
 
-func (e *entryServiceLogger) Error(msg string, err error, fields LogFields) {
+func (e *entryServiceLogger[T]) Error(msg string, err error, fields LogFields) {
 	logger := applyEntryFields(e.entry, fields)
 	if err != nil {
 		logger = logger.WithError(err)
@@ -100,7 +107,7 @@ func (e *entryServiceLogger) Error(msg string, err error, fields LogFields) {
 	logger.Error(msg)
 }
 
-func (e *entryServiceLogger) Trace(msg string, fields LogFields) {
+func (e *entryServiceLogger[T]) Trace(msg string, fields LogFields) {
 	applyEntryFields(e.entry, fields).Trace(msg)
 }
 
@@ -169,8 +176,8 @@ func fromWatermillFields(fields watermill.LogFields) LogFields {
 	return LogFields(fields)
 }
 
-func applyEntryFields(entry EntryLogger, fields LogFields) EntryLogger {
-	if len(fields) == 0 || entry == nil {
+func applyEntryFields[T EntryLoggerAdapter[T]](entry T, fields LogFields) T {
+	if len(fields) == 0 || any(entry) == nil {
 		return entry
 	}
 	enriched := entry

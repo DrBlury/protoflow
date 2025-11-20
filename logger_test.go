@@ -90,13 +90,13 @@ func (f *fakeEntry) Trace(args ...any) {
 	f.append("trace", args...)
 }
 
-func (f *fakeEntry) WithError(err error) EntryLogger {
+func (f *fakeEntry) WithError(err error) *fakeEntry {
 	clone := f.clone()
 	clone.err = err
 	return clone
 }
 
-func (f *fakeEntry) WithField(key string, value any) EntryLogger {
+func (f *fakeEntry) WithField(key string, value any) *fakeEntry {
 	clone := f.clone()
 	if clone.fields == nil {
 		clone.fields = make(LogFields)
