@@ -62,6 +62,21 @@ if err := svc.PublishProto(ctx, "orders.created", &models.OrderCreated{OrderId: 
 }
 ```
 
+### Logging
+
+`NewService` expects a `ServiceLogger`. You can obtain one by wrapping:
+
+- a standard library `slog.Logger` via `protoflow.NewSlogServiceLogger`
+- any Watermill `LoggerAdapter` via `protoflow.NewWatermillServiceLogger`
+- entry-style loggers (for example loggers that expose `WithField`/`WithError` chains) via `protoflow.NewEntryServiceLogger`
+
+```go
+entry := customLogger.WithContext(ctx) // implements the Entry-style API
+svc := protoflow.NewService(cfg, protoflow.NewEntryServiceLogger(entry), ctx, protoflow.ServiceDependencies{})
+```
+
+This lets consumers plug Protoflow into existing logging stacks without having to retool to slog or Watermill-specific adapters.
+
 ## Configuration reference
 
 `Config` selects the transport and holds per-transport settings:

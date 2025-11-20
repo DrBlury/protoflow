@@ -20,6 +20,20 @@ type ServiceLogger interface {
 	Trace(msg string, fields LogFields)
 }
 
+// EntryLogger models the subset of structured logger behaviour exposed by
+// loggers such as logrus.Entry that rely on WithField chaining and variadic log
+// method calls. Applications with loggers that match this shape can use
+// NewEntryServiceLogger to satisfy Protoflow's ServiceLogger without rewriting
+// their logging stack or depending on slog/watermill helpers.
+type EntryLogger interface {
+	Error(args ...any)
+	Info(args ...any)
+	Debug(args ...any)
+	Trace(args ...any)
+	WithError(err error) EntryLogger
+	WithField(key string, value any) EntryLogger
+}
+
 var logLevelMapping = map[slog.Level]slog.Level{
 	slog.LevelDebug: slog.LevelDebug,
 	slog.LevelInfo:  slog.LevelInfo,
@@ -45,8 +59,49 @@ func NewWatermillServiceLogger(logger watermill.LoggerAdapter) ServiceLogger {
 	return &watermillServiceLogger{inner: logger}
 }
 
+// NewEntryServiceLogger wraps an EntryLogger (for example a logrus.Entry) so it
+// can be consumed by Protoflow services without forcing additional logging
+// adapters.
+func NewEntryServiceLogger(entry EntryLogger) ServiceLogger {
+	if entry == nil {
+		panic("protoflow: entry logger cannot be nil")
+	}
+	return &entryServiceLogger{entry: entry}
+}
+
 type watermillServiceLogger struct {
 	inner watermill.LoggerAdapter
+}
+
+type entryServiceLogger struct {
+	entry EntryLogger
+}
+
+func (e *entryServiceLogger) With(fields LogFields) ServiceLogger {
+	if len(fields) == 0 {
+		return e
+	}
+	return &entryServiceLogger{entry: applyEntryFields(e.entry, fields)}
+}
+
+func (e *entryServiceLogger) Debug(msg string, fields LogFields) {
+	applyEntryFields(e.entry, fields).Debug(msg)
+}
+
+func (e *entryServiceLogger) Info(msg string, fields LogFields) {
+	applyEntryFields(e.entry, fields).Info(msg)
+}
+
+func (e *entryServiceLogger) Error(msg string, err error, fields LogFields) {
+	logger := applyEntryFields(e.entry, fields)
+	if err != nil {
+		logger = logger.WithError(err)
+	}
+	logger.Error(msg)
+}
+
+func (e *entryServiceLogger) Trace(msg string, fields LogFields) {
+	applyEntryFields(e.entry, fields).Trace(msg)
 }
 
 func (w *watermillServiceLogger) With(fields LogFields) ServiceLogger {
@@ -112,4 +167,15 @@ func fromWatermillFields(fields watermill.LogFields) LogFields {
 		return nil
 	}
 	return LogFields(fields)
+}
+
+func applyEntryFields(entry EntryLogger, fields LogFields) EntryLogger {
+	if len(fields) == 0 || entry == nil {
+		return entry
+	}
+	enriched := entry
+	for key, value := range fields {
+		enriched = enriched.WithField(key, value)
+	}
+	return enriched
 }
