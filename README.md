@@ -18,61 +18,18 @@ go get github.com/drblury/protoflow
 
 Go 1.25+ is recommended because the module itself targets Go 1.25.4 in `go.mod`.
 
-## Quick Start
+## Examples
 
-```go
-package main
+Each directory under `examples/` is a runnable scenario that you can execute with `go run ./examples/<name>`:
 
-import (
-    "context"
-    "errors"
-    "log/slog"
-    "os"
+- `examples/simple` registers an untyped handler via `RegisterMessageHandler` and works directly with Watermill messages.
+- `examples/json` wires up a typed JSON handler that forwards enriched metadata.
+- `examples/proto` showcases protobuf handlers backed by the generated files in `models/`.
+- `examples/full` demonstrates protobuf, JSON, and raw handlers alongside custom middleware, a validator, an in-memory outbox, and a periodic publisher.
 
-    "github.com/drblury/protoflow"
-    orderpb "github.com/your-org/your-protos/gen/go/orders"
-)
+Use these as blueprints and adjust the hardcoded broker configuration to match your environment.
 
-func main() {
-    logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-    cfg := &protoflow.Config{
-        PubSubSystem:       "kafka",
-        KafkaBrokers:       []string{"localhost:9092"},
-        KafkaConsumerGroup: "orders-service",
-        PoisonQueue:        "orders.poison",
-    }
-
-    svc := protoflow.NewService(cfg, logger, context.Background(), protoflow.ServiceDependencies{})
-
-    err := protoflow.RegisterProtoHandler(svc, protoflow.ProtoHandlerRegistration[*orderpb.OrderCreated]{
-        Name:               "order-created",
-        ConsumeQueue:       "orders.created",
-        PublishQueue:       "orders.processed",
-        ConsumeMessageType: &orderpb.OrderCreated{},
-        ValidateOutgoing:   true,
-        Handler: func(ctx context.Context, evt protoflow.ProtoMessageContext[*orderpb.OrderCreated]) ([]protoflow.ProtoMessageOutput, error) {
-            // do work with evt.Payload
-            metadata := evt.CloneMetadata()
-            metadata["event_source"] = "orders-service"
-            return []protoflow.ProtoMessageOutput{{
-                Message:  &orderpb.OrderProcessed{OrderId: evt.Payload.OrderId},
-                Metadata: metadata,
-            }}, nil
-        },
-        Options: []protoflow.ProtoHandlerOption{
-            protoflow.WithPublishMessageTypes(&orderpb.OrderProcessed{}),
-        },
-    })
-    if err != nil {
-        logger.Error("handler registration failed", "err", err)
-        return
-    }
-
-    if err := svc.Start(context.Background()); err != nil && !errors.Is(err, context.Canceled) {
-        logger.Error("service stopped", "err", err)
-    }
-}
-```
+## Usage
 
 ### Registering JSON handlers
 
@@ -100,7 +57,7 @@ Use the helper to publish protobuf messages outside of handlers (for example, fr
 
 ```go
 metadata := protoflow.Metadata{"event_source": "api"}
-if err := svc.PublishProto(ctx, "orders.created", &orderpb.OrderCreated{OrderId: "123"}, metadata); err != nil {
+if err := svc.PublishProto(ctx, "orders.created", &models.OrderCreated{OrderId: "123"}, metadata); err != nil {
     logger.Error("publish failed", "err", err)
 }
 ```
@@ -129,7 +86,7 @@ Only the fields required by the selected `PubSubSystem` are used. The retry-rela
 
 `ServiceDependencies` lets you inject optional collaborators:
 
-- `Validator` (`ProtoValidator`) validates protobuf payloads in the `ProtoValidateMiddleware` and optionally outgoing events.
+- `Validator` (`ProtoValidator`) validates protobuf payloads in the `ProtoValidateMiddleware` and optionally outgoing events. Implementations just need to provide a `Validate(value any) error` method (wrapping `protovalidate.Validator`, `go-playground/validator`, etc.).
 - `Outbox` (`OutboxStore`) stores emitted events before they are forwarded.
 - `Middlewares` (`[]MiddlewareRegistration`) are appended after the default chain.
 - `DisableDefaultMiddlewares` skips the built-in middleware stack so you can assemble your own.

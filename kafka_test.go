@@ -26,7 +26,7 @@ func TestCreateKafkaPublisherPanicsOnError(t *testing.T) {
 		}
 	}()
 
-	svc.createKafkaPublisher([]string{"broker"}, watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping))
+	svc.createKafkaPublisher([]string{"broker"}, newWatermillLogger(newTestLogger()))
 }
 
 func TestCreateKafkaSubscriberPanicsOnError(t *testing.T) {
@@ -46,5 +46,5 @@ func TestCreateKafkaSubscriberPanicsOnError(t *testing.T) {
 		}
 	}()
 
-	svc.createKafkaSubscriber("group", []string{"broker"}, watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping))
+	svc.createKafkaSubscriber("group", []string{"broker"}, newWatermillLogger(newTestLogger()))
 }

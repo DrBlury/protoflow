@@ -9,15 +9,7 @@ import (
 )
 
 func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
-	type incoming struct {
-		ID int `json:"id"`
-	}
-	type outgoing struct {
-		ID        int       `json:"id"`
-		Processed time.Time `json:"processed"`
-	}
-
-	handler, err := buildJSONHandler(&incoming{}, func(ctx context.Context, evt JSONMessageContext[*incoming]) ([]JSONMessageOutput[*outgoing], error) {
+	handler, err := buildJSONHandler(&jsonIncoming{}, func(ctx context.Context, evt JSONMessageContext[*jsonIncoming]) ([]JSONMessageOutput[*jsonOutgoing], error) {
 		if ctx == nil {
 			t.Fatalf("context should not be nil")
 		}
@@ -26,9 +18,9 @@ func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
 		}
 		md := evt.CloneMetadata()
 		md["processed"] = "true"
-		return []JSONMessageOutput[*outgoing]{
+		return []JSONMessageOutput[*jsonOutgoing]{
 			{
-				Message:  &outgoing{ID: evt.Payload.ID, Processed: time.Unix(100, 0)},
+				Message:  &jsonOutgoing{ID: evt.Payload.ID, Processed: time.Unix(100, 0)},
 				Metadata: md,
 			},
 		}, nil
@@ -102,5 +94,15 @@ func TestRegisterJSONHandlerValidations(t *testing.T) {
 	}
 }
 
+type jsonIncoming struct {
+	ID int `json:"id"`
+}
+
+type jsonOutgoing struct {
+	ID        int       `json:"id"`
+	Processed time.Time `json:"processed"`
+}
+
 type incomingMessage struct{}
+
 type outgoingMessage struct{}

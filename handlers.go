@@ -18,6 +18,32 @@ type handlerRegistration struct {
 	consumeMessageType proto.Message
 }
 
+// MessageHandlerRegistration wires a raw Watermill handler without typed helpers.
+type MessageHandlerRegistration struct {
+	Name         string
+	ConsumeQueue string
+	PublishQueue string
+	Handler      message.HandlerFunc
+	Subscriber   message.Subscriber
+	Publisher    message.Publisher
+}
+
+// RegisterMessageHandler attaches the provided handler to the service router.
+func RegisterMessageHandler(svc *Service, cfg MessageHandlerRegistration) error {
+	if svc == nil {
+		return errors.New("event service is required")
+	}
+
+	return svc.registerHandler(handlerRegistration{
+		Name:         cfg.Name,
+		ConsumeQueue: cfg.ConsumeQueue,
+		PublishQueue: cfg.PublishQueue,
+		Subscriber:   cfg.Subscriber,
+		Publisher:    cfg.Publisher,
+		Handler:      cfg.Handler,
+	})
+}
+
 func (s *Service) registerHandler(cfg handlerRegistration) error {
 	if cfg.Handler == nil {
 		return errors.New("handler function is required")

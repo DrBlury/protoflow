@@ -74,7 +74,9 @@ func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistr
 
 	var validate func(proto.Message) error
 	if cfg.ValidateOutgoing && svc.validator != nil {
-		validate = svc.validator.Validate
+		validate = func(msg proto.Message) error {
+			return svc.validator.Validate(msg)
+		}
 	}
 
 	wrapped, err := buildProtoHandler(cfg.ConsumeMessageType, cfg.Handler, validate)

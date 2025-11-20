@@ -19,7 +19,7 @@ func TestSetupAmpqPanicsOnConnectionError(t *testing.T) {
 	}
 
 	svc := &Service{Conf: &Config{RabbitMQURL: "amqp://guest"}}
-	logger := watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping)
+	logger := newWatermillLogger(newTestLogger())
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -47,7 +47,7 @@ func TestCreateRabbitMQPublisherPanicsOnError(t *testing.T) {
 		}
 	}()
 
-	svc.createRabbitMQPublisher(amqp.Config{}, &amqp.ConnectionWrapper{}, watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping))
+	svc.createRabbitMQPublisher(amqp.Config{}, &amqp.ConnectionWrapper{}, newWatermillLogger(newTestLogger()))
 }
 
 func TestCreateRabbitMQSubscriberPanicsOnError(t *testing.T) {
@@ -67,5 +67,5 @@ func TestCreateRabbitMQSubscriberPanicsOnError(t *testing.T) {
 		}
 	}()
 
-	svc.createRabbitMQSubscriber(amqp.Config{}, &amqp.ConnectionWrapper{}, watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping))
+	svc.createRabbitMQSubscriber(amqp.Config{}, &amqp.ConnectionWrapper{}, newWatermillLogger(newTestLogger()))
 }

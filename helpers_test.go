@@ -3,6 +3,7 @@ package protoflow
 import (
 	"context"
 	"sync"
+	"testing"
 
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -80,7 +81,7 @@ func (l *testLogger) With(watermill.LogFields) watermill.LoggerAdapter { return 
 
 type testValidator struct{ err error }
 
-func (v *testValidator) Validate(proto.Message) error { return v.err }
+func (v *testValidator) Validate(_ any) error { return v.err }
 
 type testOutbox struct {
 	mu      sync.Mutex
@@ -110,4 +111,19 @@ func (o *testOutbox) Records() []outboxRecord {
 	clone := make([]outboxRecord, len(o.records))
 	copy(clone, o.records)
 	return clone
+}
+
+func newTestService(t *testing.T) *Service {
+	t.Helper()
+	logger := newWatermillLogger(newTestLogger())
+	router, err := message.NewRouter(message.RouterConfig{}, logger)
+	if err != nil {
+		t.Fatalf("router init failed: %v", err)
+	}
+	return &Service{
+		router:        router,
+		publisher:     &testPublisher{},
+		subscriber:    &testSubscriber{},
+		protoRegistry: make(map[string]func() proto.Message),
+	}
 }

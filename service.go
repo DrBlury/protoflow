@@ -3,7 +3,6 @@ package protoflow
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"sync"
 
 	"github.com/ThreeDotsLabs/watermill"
@@ -12,20 +11,14 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-var logLevelMapping = map[slog.Level]slog.Level{
-	slog.LevelDebug: slog.LevelDebug,
-	slog.LevelInfo:  slog.LevelInfo,
-	slog.LevelWarn:  slog.LevelWarn,
-	slog.LevelError: slog.LevelError,
-}
-
 var routerRun = func(router *message.Router, ctx context.Context) error {
 	return router.Run(ctx)
 }
 
-// ProtoValidator validates protobuf messages after they are unmarshalled.
+// ProtoValidator validates unmarshalled payloads. Implementations typically
+// forward to protovalidate or a custom struct validator.
 type ProtoValidator interface {
-	Validate(proto.Message) error
+	Validate(value any) error
 }
 
 // OutboxStore persists processed messages so they can be forwarded reliably.
@@ -59,8 +52,8 @@ type Service struct {
 
 // NewService constructs a Service for the supplied configuration. Register handlers
 // on the returned Service before calling Start.
-func NewService(conf *Config, log *slog.Logger, ctx context.Context, deps ServiceDependencies) *Service {
-	logger := watermill.NewSlogLoggerWithLevelMapping(log, logLevelMapping)
+func NewService(conf *Config, log ServiceLogger, ctx context.Context, deps ServiceDependencies) *Service {
+	logger := newWatermillLogger(log)
 	logger.Info("Creating event service",
 		watermill.LogFields{
 			"pubsub_system": conf.PubSubSystem,

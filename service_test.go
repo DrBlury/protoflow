@@ -20,8 +20,12 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-func newTestLogger() *slog.Logger {
+func newTestSlogLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+func newTestLogger() ServiceLogger {
+	return NewSlogServiceLogger(newTestSlogLogger())
 }
 
 func TestNewServiceConfiguresKafka(t *testing.T) {
@@ -182,7 +186,7 @@ func TestNewServiceConfiguresAWS(t *testing.T) {
 func TestSetupPubSubUnsupportedPanics(t *testing.T) {
 
 	svc := &Service{Conf: &Config{PubSubSystem: "gcp"}}
-	logger := watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping)
+	logger := newWatermillLogger(newTestLogger())
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -298,21 +302,6 @@ func testRegisterHandlerValidationsExplicitName(t *testing.T) {
 	}
 	if _, ok := svc.router.Handlers()["custom"]; !ok {
 		t.Fatalf("handler not registered with explicit name")
-	}
-}
-
-func newTestService(t *testing.T) *Service {
-	t.Helper()
-	logger := watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping)
-	router, err := message.NewRouter(message.RouterConfig{}, logger)
-	if err != nil {
-		t.Fatalf("router init failed: %v", err)
-	}
-	return &Service{
-		router:        router,
-		publisher:     &testPublisher{},
-		subscriber:    &testSubscriber{},
-		protoRegistry: make(map[string]func() proto.Message),
 	}
 }
 

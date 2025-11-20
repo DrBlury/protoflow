@@ -26,7 +26,7 @@ func TestCreateAWSConfigSetsRegion(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{AWSRegion: "ap-southeast-2"},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 
 	cfg := svc.createAWSConfig(context.Background())
@@ -44,7 +44,7 @@ func TestCreateAWSConfigPanicsOnError(t *testing.T) {
 		return aws.Config{}, errors.New("boom")
 	}
 
-	svc := &Service{Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping)}
+	svc := &Service{Logger: newWatermillLogger(newTestLogger())}
 
 	defer func() {
 		if r := recover(); r == nil {
@@ -80,7 +80,7 @@ func TestCreateAwsPublisherAccountFallbacks(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{AWSAccountID: " '123456789012' ", AWSRegion: "eu-central-1"},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 	cfg := &aws.Config{}
 	svc.createAwsPublisher(svc.Logger, cfg)
@@ -121,7 +121,7 @@ func TestCreateAwsPublisherPanicsOnEndpointParse(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{AWSAccountID: "123456789012", AWSEndpoint: "://bad"},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 	cfg := &aws.Config{}
 
@@ -162,7 +162,7 @@ func TestCreateAwsSubscriberFallbacks(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{AWSAccountID: "", AWSRegion: "us-west-2", AWSEndpoint: "http://localhost:4566"},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 	cfg := &aws.Config{BaseEndpoint: aws.String("http://localhost:4566")}
 	svc.createAwsSubscriber(svc.Logger, cfg)
@@ -185,7 +185,7 @@ func TestCreateAwsSubscriberPanicsOnResolverError(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 	cfg := &aws.Config{}
 
@@ -209,7 +209,7 @@ func TestCreateAwsPublisherPanicsOnResolverError(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{AWSAccountID: "123456789012"},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 
 	defer func() {
@@ -232,7 +232,7 @@ func TestCreateAwsPublisherPanicsOnPublisherError(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{AWSAccountID: "123456789012"},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 
 	defer func() {
@@ -255,7 +255,7 @@ func TestCreateAwsSubscriberPanicsOnSubscriberError(t *testing.T) {
 
 	svc := &Service{
 		Conf:   &Config{},
-		Logger: watermill.NewSlogLoggerWithLevelMapping(newTestLogger(), logLevelMapping),
+		Logger: newWatermillLogger(newTestLogger()),
 	}
 
 	defer func() {
