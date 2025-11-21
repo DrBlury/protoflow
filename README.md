@@ -1,11 +1,10 @@
 # Protoflow
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/drblury/protoflow.svg)](https://pkg.go.dev/github.com/drblury/protoflow)
-[![pkg.go.dev](https://img.shields.io/badge/pkg.go.dev-docs-00ADD8?logo=go&logoColor=white)](https://pkg.go.dev/github.com/drblury/protoflow)
 [![Go Report Card](https://goreportcard.com/badge/github.com/drblury/protoflow)](https://goreportcard.com/report/github.com/drblury/protoflow)
 [![CI](https://github.com/DrBlury/protoflow/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/DrBlury/protoflow/actions/workflows/ci.yml)
 [![Coverage](https://codecov.io/gh/DrBlury/protoflow/branch/main/graph/badge.svg)](https://codecov.io/gh/DrBlury/protoflow)
-[![Release](https://img.shields.io/github/v/release/DrBlury/protoflow?display_name=tag)](https://github.com/DrBlury/protoflow/releases)
+[![Latest Tag](https://img.shields.io/github/v/tag/DrBlury/protoflow?sort=semver&label=latest%20tag)](https://github.com/DrBlury/protoflow/tags)
 [![License](https://img.shields.io/github/license/DrBlury/protoflow)](LICENSE)
 
 Protoflow is a thin productivity layer on top of [Watermill](https://watermill.io/) that wires routers, publishers, subscribers, middleware, and typed handler helpers so you can build protobuf or JSON services without reimplementing the plumbing for Kafka, RabbitMQ, or AWS SNS/SQS. It keeps the domain-facing API in the root module while the heavy lifting lives under `internal/runtime/`.
@@ -100,6 +99,8 @@ Use them as blueprints and swap the broker configuration for your environment.
 `taskfile.yml` defines repeatable tasks—`task lint`, `task test`, and transport-specific helpers—so contributors share the same local workflow. See the [development guide](docs/development/README.md) for the full command list plus local broker hints.
 
 Run the full test suite with `go test ./...` (or `task test`) before sending changes.
+
+Pushing a semver-style tag (for example `git tag v0.3.0 && git push origin v0.3.0`) triggers the release workflow, and GitHub automatically creates a release from that tag.
 
 ## Contribution guidelines
 
