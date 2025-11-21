@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
-	handler, err := buildJSONHandler(&jsonIncoming{}, func(ctx context.Context, evt JSONMessageContext[*jsonIncoming]) ([]JSONMessageOutput[*jsonOutgoing], error) {
+	handler, err := buildJSONHandler(func(ctx context.Context, evt JSONMessageContext[*jsonIncoming]) ([]JSONMessageOutput[*jsonOutgoing], error) {
 		if ctx == nil {
 			t.Fatalf("context should not be nil")
 		}
@@ -56,32 +56,29 @@ func TestRegisterJSONHandlerValidations(t *testing.T) {
 	}
 
 	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*struct{}, *struct{}]{
-		ConsumeQueue:       "queue",
-		PublishQueue:       "out",
-		ConsumeMessageType: nil,
-		Handler: func(context.Context, JSONMessageContext[*struct{}]) ([]JSONMessageOutput[*struct{}], error) {
-			return nil, nil
-		},
-	})
-	if err == nil {
-		t.Fatalf("expected error when prototype missing")
-	}
-
-	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*struct{}, *struct{}]{
-		ConsumeQueue:       "queue",
-		PublishQueue:       "out",
-		ConsumeMessageType: &struct{}{},
-		Handler:            nil,
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
+		Handler:      nil,
 	})
 	if err == nil {
 		t.Fatalf("expected error when handler missing")
 	}
 
+	err = RegisterJSONHandler(svc, JSONHandlerRegistration[struct{}, *outgoingMessage]{
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
+		Handler: func(context.Context, JSONMessageContext[struct{}]) ([]JSONMessageOutput[*outgoingMessage], error) {
+			return nil, nil
+		},
+	})
+	if err == nil {
+		t.Fatalf("expected error when consume type is not a pointer")
+	}
+
 	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{
-		Name:               "json_handler",
-		ConsumeQueue:       "queue",
-		PublishQueue:       "out",
-		ConsumeMessageType: &incomingMessage{},
+		Name:         "json_handler",
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
 		Handler: func(context.Context, JSONMessageContext[*incomingMessage]) ([]JSONMessageOutput[*outgoingMessage], error) {
 			return nil, nil
 		},
@@ -91,6 +88,18 @@ func TestRegisterJSONHandlerValidations(t *testing.T) {
 	}
 	if _, ok := svc.router.Handlers()["json_handler"]; !ok {
 		t.Fatalf("json handler not registered")
+	}
+
+	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{
+		Name:         "json_handler_inferred",
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
+		Handler: func(context.Context, JSONMessageContext[*incomingMessage]) ([]JSONMessageOutput[*outgoingMessage], error) {
+			return nil, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected handler to infer consume type: %v", err)
 	}
 }
 

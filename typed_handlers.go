@@ -13,14 +13,12 @@ import (
 // ProtoHandlerRegistration configures a typed protobuf handler that automatically
 // unmarshals incoming payloads and marshals emitted events.
 type ProtoHandlerRegistration[T proto.Message] struct {
-	Name               string
-	ConsumeQueue       string
-	PublishQueue       string
-	ConsumeMessageType T
-	Handler            ProtoMessageHandler[T]
-	PublishMessageType proto.Message
-	Options            []ProtoHandlerOption
-	ValidateOutgoing   bool
+	Name             string
+	ConsumeQueue     string
+	PublishQueue     string
+	Handler          ProtoMessageHandler[T]
+	Options          []ProtoHandlerOption
+	ValidateOutgoing bool
 }
 
 // ProtoHandlerOption customises handler registration.
@@ -65,6 +63,12 @@ func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistr
 		return errors.New("event service is required")
 	}
 
+	var zero T
+	prototype, err := ensureProtoPrototype(zero)
+	if err != nil {
+		return err
+	}
+
 	extra := protoHandlerOptions{}
 	for _, opt := range cfg.Options {
 		if opt != nil {
@@ -79,7 +83,7 @@ func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistr
 		}
 	}
 
-	wrapped, err := buildProtoHandler(cfg.ConsumeMessageType, cfg.Handler, validate)
+	wrapped, err := buildProtoHandler(prototype, cfg.Handler, validate)
 	if err != nil {
 		return err
 	}
@@ -89,14 +93,11 @@ func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistr
 		ConsumeQueue:       cfg.ConsumeQueue,
 		PublishQueue:       cfg.PublishQueue,
 		Handler:            wrapped,
-		consumeMessageType: cfg.ConsumeMessageType,
+		consumeMessageType: prototype,
 	}); err != nil {
 		return err
 	}
 
-	if cfg.PublishMessageType != nil {
-		svc.registerProtoType(cfg.PublishMessageType)
-	}
 	for _, emitted := range extra.additionalPublishTypes {
 		svc.registerProtoType(emitted)
 	}
@@ -162,6 +163,28 @@ func clonePrototype[T proto.Message](prototype T) (T, error) {
 		return zero, fmt.Errorf("unexpected prototype type %T", cloned)
 	}
 
+	return typed, nil
+}
+
+func ensureProtoPrototype[T proto.Message](candidate T) (T, error) {
+	if !isNilProto(candidate) {
+		return candidate, nil
+	}
+
+	var zero T
+	typ := reflect.TypeOf(candidate)
+	if typ == nil {
+		return zero, errors.New("consume message type is required")
+	}
+	if typ.Kind() != reflect.Ptr {
+		return zero, errors.New("consume message type must be a pointer")
+	}
+
+	inst := reflect.New(typ.Elem()).Interface()
+	typed, ok := inst.(T)
+	if !ok {
+		return zero, fmt.Errorf("unexpected prototype type %s", typ)
+	}
 	return typed, nil
 }
 

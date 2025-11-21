@@ -35,10 +35,9 @@ func main() {
 	svc := protoflow.NewService(cfg, logger, ctx, protoflow.ServiceDependencies{})
 
 	err := protoflow.RegisterJSONHandler(svc, protoflow.JSONHandlerRegistration[*IncomingOrder, *OutgoingOrder]{
-		Name:               "json-orders",
-		ConsumeQueue:       "orders.incoming.json",
-		PublishQueue:       "orders.processed.json",
-		ConsumeMessageType: &IncomingOrder{},
+		Name:         "json-orders",
+		ConsumeQueue: "orders.incoming.json",
+		PublishQueue: "orders.processed.json",
 		Handler: func(ctx context.Context, evt protoflow.JSONMessageContext[*IncomingOrder]) ([]protoflow.JSONMessageOutput[*OutgoingOrder], error) {
 			resp := &OutgoingOrder{OrderID: evt.Payload.OrderID, Status: "processed"}
 			metadata := evt.CloneMetadata()

@@ -50,12 +50,10 @@ func buildDependencies() protoflow.ServiceDependencies {
 
 func registerHandlers(svc *protoflow.Service) {
 	must(protoflow.RegisterProtoHandler(svc, protoflow.ProtoHandlerRegistration[*models.OrderCreated]{
-		Name:               "proto-created",
-		ConsumeQueue:       "orders.created",
-		PublishQueue:       "orders.processed",
-		ConsumeMessageType: &models.OrderCreated{},
-		PublishMessageType: &models.OrderProcessed{},
-		ValidateOutgoing:   true,
+		Name:             "proto-created",
+		ConsumeQueue:     "orders.created",
+		PublishQueue:     "orders.processed",
+		ValidateOutgoing: true,
 		Handler: func(ctx context.Context, evt protoflow.ProtoMessageContext[*models.OrderCreated]) ([]protoflow.ProtoMessageOutput, error) {
 			out := &models.OrderProcessed{
 				OrderId: evt.Payload.GetOrderId(),
@@ -65,13 +63,15 @@ func registerHandlers(svc *protoflow.Service) {
 			metadata["processed_by"] = "proto-handler"
 			return []protoflow.ProtoMessageOutput{{Message: out, Metadata: metadata}}, nil
 		},
+		Options: []protoflow.ProtoHandlerOption{
+			protoflow.WithPublishMessageTypes(&models.OrderProcessed{}),
+		},
 	}))
 
 	must(protoflow.RegisterJSONHandler(svc, protoflow.JSONHandlerRegistration[*incomingJSON, *outgoingJSON]{
-		Name:               "json-ingest",
-		ConsumeQueue:       "json.orders",
-		PublishQueue:       "json.audit",
-		ConsumeMessageType: &incomingJSON{},
+		Name:         "json-ingest",
+		ConsumeQueue: "json.orders",
+		PublishQueue: "json.audit",
 		Handler: func(ctx context.Context, evt protoflow.JSONMessageContext[*incomingJSON]) ([]protoflow.JSONMessageOutput[*outgoingJSON], error) {
 			metadata := evt.CloneMetadata()
 			metadata["json_seen"] = time.Now().UTC().Format(time.RFC3339)

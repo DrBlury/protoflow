@@ -76,8 +76,7 @@ func TestBuildProtoHandlerHonoursCustomMetadata(t *testing.T) {
 
 func TestRegisterProtoHandlerValidations(t *testing.T) {
 	svc := newTestService(t)
-	err := RegisterProtoHandler[*structpb.Struct](nil, ProtoHandlerRegistration[*structpb.Struct]{
-		ConsumeMessageType: &structpb.Struct{},
+	err := RegisterProtoHandler(nil, ProtoHandlerRegistration[*structpb.Struct]{
 		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
 			return nil, nil
 		},
@@ -87,29 +86,16 @@ func TestRegisterProtoHandlerValidations(t *testing.T) {
 	}
 
 	err = RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
-		ConsumeQueue:       "queue",
-		ConsumeMessageType: nil,
-		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
-			return nil, nil
-		},
-	})
-	if err == nil {
-		t.Fatalf("expected error when prototype nil")
-	}
-
-	err = RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
-		ConsumeQueue:       "queue",
-		ConsumeMessageType: &structpb.Struct{},
-		Handler:            nil,
+		ConsumeQueue: "queue",
+		Handler:      nil,
 	})
 	if err == nil {
 		t.Fatalf("expected error when handler nil")
 	}
 
 	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
-		ConsumeQueue:       "queue",
-		PublishQueue:       "out",
-		ConsumeMessageType: &structpb.Struct{},
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
 		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
 			return nil, nil
 		},
@@ -119,6 +105,19 @@ func TestRegisterProtoHandlerValidations(t *testing.T) {
 	if _, ok := svc.router.Handlers()[fmt.Sprintf("%T-Handler", &structpb.Struct{})]; !ok {
 		t.Fatalf("typed handler not registered")
 	}
+	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
+		Name:         "typed_inferred",
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
+		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+			return nil, nil
+		},
+	}); err != nil {
+		t.Fatalf("expected handler to infer consume type: %v", err)
+	}
+	if _, ok := svc.router.Handlers()["typed_inferred"]; !ok {
+		t.Fatalf("typed handler (inferred) not registered")
+	}
 }
 
 func TestRegisterProtoHandlerRegistersPublishTypes(t *testing.T) {
@@ -127,13 +126,11 @@ func TestRegisterProtoHandlerRegistersPublishTypes(t *testing.T) {
 	extra := &structpb.ListValue{}
 
 	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
-		Name:               "typed",
-		ConsumeQueue:       "queue",
-		PublishQueue:       "out",
-		ConsumeMessageType: &structpb.Struct{},
-		PublishMessageType: primary,
+		Name:         "typed",
+		ConsumeQueue: "queue",
+		PublishQueue: "out",
 		Options: []ProtoHandlerOption{
-			WithPublishMessageTypes(extra),
+			WithPublishMessageTypes(primary, extra),
 		},
 		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
 			return nil, nil

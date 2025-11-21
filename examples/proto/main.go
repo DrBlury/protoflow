@@ -26,12 +26,10 @@ func main() {
 	svc := protoflow.NewService(cfg, logger, ctx, protoflow.ServiceDependencies{})
 
 	err := protoflow.RegisterProtoHandler(svc, protoflow.ProtoHandlerRegistration[*models.OrderCreated]{
-		Name:               "proto-orders",
-		ConsumeQueue:       "orders.created.proto",
-		PublishQueue:       "orders.processed.proto",
-		ConsumeMessageType: &models.OrderCreated{},
-		PublishMessageType: &models.OrderProcessed{},
-		ValidateOutgoing:   false,
+		Name:             "proto-orders",
+		ConsumeQueue:     "orders.created.proto",
+		PublishQueue:     "orders.processed.proto",
+		ValidateOutgoing: false,
 		Handler: func(ctx context.Context, evt protoflow.ProtoMessageContext[*models.OrderCreated]) ([]protoflow.ProtoMessageOutput, error) {
 			processed := &models.OrderProcessed{
 				OrderId: evt.Payload.GetOrderId(),

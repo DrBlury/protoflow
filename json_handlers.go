@@ -11,11 +11,10 @@ import (
 
 // JSONHandlerRegistration wires a typed JSON handler to the router.
 type JSONHandlerRegistration[T any, O any] struct {
-	Name               string
-	ConsumeQueue       string
-	PublishQueue       string
-	ConsumeMessageType T
-	Handler            JSONMessageHandler[T, O]
+	Name         string
+	ConsumeQueue string
+	PublishQueue string
+	Handler      JSONMessageHandler[T, O]
 }
 
 // JSONMessageContext exposes the incoming payload and metadata for JSON handlers.
@@ -44,7 +43,7 @@ func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration
 		return errors.New("event service is required")
 	}
 
-	wrapped, err := buildJSONHandler(cfg.ConsumeMessageType, cfg.Handler)
+	wrapped, err := buildJSONHandler(cfg.Handler)
 	if err != nil {
 		return err
 	}
@@ -57,19 +56,18 @@ func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration
 	})
 }
 
-func buildJSONHandler[T any, O any](prototype T, handler JSONMessageHandler[T, O]) (message.HandlerFunc, error) {
+func buildJSONHandler[T any, O any](handler JSONMessageHandler[T, O]) (message.HandlerFunc, error) {
 	if handler == nil {
 		return nil, errors.New("json handler function is required")
 	}
-	if reflect.ValueOf(prototype).IsZero() {
-		return nil, errors.New("consume message type is required")
+
+	prototypeFactory, err := jsonPrototypeFactory[T]()
+	if err != nil {
+		return nil, err
 	}
 
 	return func(msg *message.Message) ([]*message.Message, error) {
-		typed, err := cloneJSONPrototype(prototype)
-		if err != nil {
-			return nil, err
-		}
+		typed := prototypeFactory()
 
 		if err := Unmarshal(msg.Payload, typed); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal JSON payload: %w", err)
@@ -89,22 +87,20 @@ func buildJSONHandler[T any, O any](prototype T, handler JSONMessageHandler[T, O
 	}, nil
 }
 
-func cloneJSONPrototype[T any](prototype T) (T, error) {
+func jsonPrototypeFactory[T any]() (func() T, error) {
 	var zero T
-	prototypeValue := reflect.ValueOf(prototype)
-	if !prototypeValue.IsValid() {
-		return zero, errors.New("consume message type is required")
+	typ := reflect.TypeOf(zero)
+	if typ == nil {
+		return nil, errors.New("consume message type is required")
 	}
-	if prototypeValue.Kind() != reflect.Ptr {
-		return zero, errors.New("consume message type must be a pointer")
+	if typ.Kind() != reflect.Ptr {
+		return nil, errors.New("consume message type must be a pointer")
 	}
-
-	clone := reflect.New(prototypeValue.Type().Elem()).Interface()
-	typed, ok := clone.(T)
-	if !ok {
-		return zero, fmt.Errorf("unexpected prototype type %T", clone)
-	}
-	return typed, nil
+	elem := typ.Elem()
+	return func() T {
+		clone := reflect.New(elem).Interface()
+		return clone.(T)
+	}, nil
 }
 
 func convertJSONOutputs[T any](outputs []JSONMessageOutput[T], fallback Metadata) ([]*message.Message, error) {
