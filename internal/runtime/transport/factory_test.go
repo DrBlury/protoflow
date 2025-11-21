@@ -142,96 +142,125 @@ func TestDefaultFactoryBuild(t *testing.T) {
 		}
 	})
 
-	t.Run("kafka", func(t *testing.T) {
-		origPub := KafkaPublisherFactory
-		origSub := KafkaSubscriberFactory
-		pub := &testPublisher{}
-		sub := &testSubscriber{}
-		KafkaPublisherFactory = func(cfg kafka.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
-			return pub, nil
-		}
-		KafkaSubscriberFactory = func(cfg kafka.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
-			return sub, nil
-		}
-		defer func() {
-			KafkaPublisherFactory = origPub
-			KafkaSubscriberFactory = origSub
-		}()
+	tests := []struct {
+		name  string
+		cfg   *config.Config
+		setup func(t *testing.T) (cleanup func(), pub message.Publisher, sub message.Subscriber)
+	}{
+		{
+			name: "kafka",
+			cfg:  &config.Config{PubSubSystem: "kafka", KafkaBrokers: []string{"broker"}, KafkaConsumerGroup: "group"},
+			setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
+				t.Helper()
+				origPub := KafkaPublisherFactory
+				origSub := KafkaSubscriberFactory
+				pub := &testPublisher{}
+				sub := &testSubscriber{}
+				KafkaPublisherFactory = func(cfg kafka.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
+					if len(cfg.Brokers) == 0 {
+						t.Fatal("expected brokers to be provided")
+					}
+					return pub, nil
+				}
+				KafkaSubscriberFactory = func(cfg kafka.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
+					if cfg.ConsumerGroup == "" {
+						t.Fatal("expected consumer group to be provided")
+					}
+					return sub, nil
+				}
+				return func() {
+					KafkaPublisherFactory = origPub
+					KafkaSubscriberFactory = origSub
+				}, pub, sub
+			},
+		},
+		{
+			name: "rabbitmq",
+			cfg:  &config.Config{PubSubSystem: "rabbitmq", RabbitMQURL: "amqp://guest"},
+			setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
+				t.Helper()
+				origConn := AmqpConnectionFactory
+				origPub := AmqpPublisherFactory
+				origSub := AmqpSubscriberFactory
+				conn := &amqp.ConnectionWrapper{}
+				pub := &testPublisher{}
+				sub := &testSubscriber{}
+				AmqpConnectionFactory = func(cfg amqp.ConnectionConfig, logger watermill.LoggerAdapter) (*amqp.ConnectionWrapper, error) {
+					if cfg.AmqpURI == "" {
+						t.Fatal("expected AMQP URI")
+					}
+					return conn, nil
+				}
+				AmqpPublisherFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Publisher, error) {
+					if c != conn {
+						t.Fatal("unexpected connection passed to publisher factory")
+					}
+					return pub, nil
+				}
+				AmqpSubscriberFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Subscriber, error) {
+					if c != conn {
+						t.Fatal("unexpected connection passed to subscriber factory")
+					}
+					return sub, nil
+				}
+				return func() {
+					AmqpConnectionFactory = origConn
+					AmqpPublisherFactory = origPub
+					AmqpSubscriberFactory = origSub
+				}, pub, sub
+			},
+		},
+		{
+			name: "aws",
+			cfg:  &config.Config{PubSubSystem: "aws", AWSAccountID: "000000000000", AWSRegion: "us-east-1"},
+			setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
+				t.Helper()
+				origLoader := AWSDefaultConfigLoader
+				origTopic := SNSTopicResolverFactory
+				origPub := SNSPublisherFactory
+				origSub := SNSSubscriberFactory
+				pub := &testPublisher{}
+				sub := &testSubscriber{}
+				AWSDefaultConfigLoader = func(ctx context.Context, optFns ...func(*awsconfig.LoadOptions) error) (aws.Config, error) {
+					return aws.Config{Region: "us-east-1"}, nil
+				}
+				SNSTopicResolverFactory = func(accountID, region string) (*sns.GenerateArnTopicResolver, error) {
+					return origTopic(accountID, region)
+				}
+				SNSPublisherFactory = func(cfg sns.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
+					if cfg.TopicResolver == nil {
+						t.Fatal("expected topic resolver to be set")
+					}
+					return pub, nil
+				}
+				SNSSubscriberFactory = func(cfg sns.SubscriberConfig, sqsCfg sqs.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
+					return sub, nil
+				}
+				return func() {
+					AWSDefaultConfigLoader = origLoader
+					SNSTopicResolverFactory = origTopic
+					SNSPublisherFactory = origPub
+					SNSSubscriberFactory = origSub
+				}, pub, sub
+			},
+		},
+	}
 
-		transport, err := factory.Build(context.Background(), &config.Config{PubSubSystem: "kafka", KafkaBrokers: []string{"broker"}, KafkaConsumerGroup: "group"}, watermill.NopLogger{})
-		if err != nil {
-			t.Fatalf("unexpected error building kafka transport: %v", err)
-		}
-		if transport.Publisher != pub || transport.Subscriber != sub {
-			t.Fatal("expected kafka transport to reuse stub publishers")
-		}
-	})
-
-	t.Run("rabbitmq", func(t *testing.T) {
-		origConn := AmqpConnectionFactory
-		origPub := AmqpPublisherFactory
-		origSub := AmqpSubscriberFactory
-		conn := &amqp.ConnectionWrapper{}
-		pub := &testPublisher{}
-		sub := &testSubscriber{}
-		AmqpConnectionFactory = func(cfg amqp.ConnectionConfig, logger watermill.LoggerAdapter) (*amqp.ConnectionWrapper, error) {
-			return conn, nil
-		}
-		AmqpPublisherFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Publisher, error) {
-			return pub, nil
-		}
-		AmqpSubscriberFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Subscriber, error) {
-			return sub, nil
-		}
-		defer func() {
-			AmqpConnectionFactory = origConn
-			AmqpPublisherFactory = origPub
-			AmqpSubscriberFactory = origSub
-		}()
-
-		transport, err := factory.Build(context.Background(), &config.Config{PubSubSystem: "rabbitmq", RabbitMQURL: "amqp://guest"}, watermill.NopLogger{})
-		if err != nil {
-			t.Fatalf("unexpected error building rabbitmq transport: %v", err)
-		}
-		if transport.Publisher != pub || transport.Subscriber != sub {
-			t.Fatal("expected rabbitmq transport to reuse stub components")
-		}
-	})
-
-	t.Run("aws", func(t *testing.T) {
-		origLoader := AWSDefaultConfigLoader
-		origTopic := SNSTopicResolverFactory
-		origPub := SNSPublisherFactory
-		origSub := SNSSubscriberFactory
-		pub := &testPublisher{}
-		sub := &testSubscriber{}
-		AWSDefaultConfigLoader = func(ctx context.Context, optFns ...func(*awsconfig.LoadOptions) error) (aws.Config, error) {
-			return aws.Config{Region: "us-east-1"}, nil
-		}
-		SNSTopicResolverFactory = func(accountID, region string) (*sns.GenerateArnTopicResolver, error) {
-			return origTopic(accountID, region)
-		}
-		SNSPublisherFactory = func(cfg sns.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
-			return pub, nil
-		}
-		SNSSubscriberFactory = func(cfg sns.SubscriberConfig, sqsCfg sqs.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
-			return sub, nil
-		}
-		defer func() {
-			AWSDefaultConfigLoader = origLoader
-			SNSTopicResolverFactory = origTopic
-			SNSPublisherFactory = origPub
-			SNSSubscriberFactory = origSub
-		}()
-
-		transport, err := factory.Build(context.Background(), &config.Config{PubSubSystem: "aws", AWSAccountID: "000000000000", AWSRegion: "us-east-1"}, watermill.NopLogger{})
-		if err != nil {
-			t.Fatalf("unexpected error building aws transport: %v", err)
-		}
-		if transport.Publisher != pub || transport.Subscriber != sub {
-			t.Fatal("expected aws transport to reuse stub components")
-		}
-	})
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cleanup, expectedPub, expectedSub := tc.setup(t)
+			if cleanup != nil {
+				t.Cleanup(cleanup)
+			}
+			transport, err := factory.Build(context.Background(), tc.cfg, watermill.NopLogger{})
+			if err != nil {
+				t.Fatalf("unexpected error building %s transport: %v", tc.name, err)
+			}
+			if transport.Publisher != expectedPub || transport.Subscriber != expectedSub {
+				t.Fatalf("expected %s transport to reuse stub components", tc.name)
+			}
+		})
+	}
 }
 
 func TestDefaultFactoryRequiresConfig(t *testing.T) {

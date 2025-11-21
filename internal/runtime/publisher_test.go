@@ -12,6 +12,10 @@ import (
 	metadatapkg "github.com/drblury/protoflow/internal/runtime/metadata"
 )
 
+type publisherTestContextKey struct{}
+
+var testCtxKey = publisherTestContextKey{}
+
 func TestNewMessageFromProtoValidations(t *testing.T) {
 	if _, err := NewMessageFromProto(nil, nil); err == nil {
 		t.Fatal("expected error when event nil")
@@ -43,7 +47,7 @@ func TestPublishProtoValidations(t *testing.T) {
 func TestPublishProtoSetsContextAndTopic(t *testing.T) {
 	payload := &structpb.Struct{}
 	recorder := &recordingPublisher{}
-	ctx := context.WithValue(context.Background(), struct{}{}, "ctx")
+	ctx := context.WithValue(context.Background(), testCtxKey, "ctx")
 	metadata := metadatapkg.Metadata{"origin": "test"}
 
 	if err := PublishProto(ctx, recorder, "orders", payload, metadata); err != nil {
@@ -52,7 +56,7 @@ func TestPublishProtoSetsContextAndTopic(t *testing.T) {
 	if len(recorder.topics) != 1 || recorder.topics[0] != "orders" {
 		t.Fatalf("expected topic to be recorded, got %#v", recorder.topics)
 	}
-	if recorder.messages[0].Context().Value(struct{}{}) != "ctx" {
+	if recorder.messages[0].Context().Value(testCtxKey) != "ctx" {
 		t.Fatal("expected context to be attached to message")
 	}
 }
