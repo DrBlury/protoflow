@@ -1,5 +1,5 @@
 package protoflow
 
-import runtimepkg "github.com/drblury/protoflow/internal/runtime"
+import idspkg "github.com/drblury/protoflow/internal/runtime/ids"
 
-var CreateULID = runtimepkg.CreateULID
+var CreateULID = idspkg.CreateULID

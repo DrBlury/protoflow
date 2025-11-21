@@ -8,6 +8,10 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/ThreeDotsLabs/watermill/message/router/plugin"
 	"google.golang.org/protobuf/proto"
+
+	configpkg "github.com/drblury/protoflow/internal/runtime/config"
+	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
+	transportpkg "github.com/drblury/protoflow/internal/runtime/transport"
 )
 
 var routerRun = func(router *message.Router, ctx context.Context) error {
@@ -32,13 +36,13 @@ type ServiceDependencies struct {
 	Validator                 ProtoValidator
 	Middlewares               []MiddlewareRegistration // Appended after the default middleware chain.
 	DisableDefaultMiddlewares bool                     // Skips registering the default middleware chain when true.
-	TransportFactory          TransportFactory
+	TransportFactory          transportpkg.Factory
 }
 
 // Service wires a Watermill router, publisher, subscriber, and middleware chain.
 type Service struct {
-	Conf   *Config
-	Logger ServiceLogger
+	Conf   *configpkg.Config
+	Logger loggingpkg.ServiceLogger
 
 	publisher  message.Publisher
 	subscriber message.Subscriber
@@ -53,10 +57,10 @@ type Service struct {
 
 // NewService constructs a Service for the supplied configuration. Register handlers
 // on the returned Service before calling Start.
-func NewService(conf *Config, log ServiceLogger, ctx context.Context, deps ServiceDependencies) *Service {
-	wmLogger := newWatermillLogger(log)
+func NewService(conf *configpkg.Config, log loggingpkg.ServiceLogger, ctx context.Context, deps ServiceDependencies) *Service {
+	wmLogger := loggingpkg.NewWatermillAdapter(log)
 	log.Info("Creating event service",
-		LogFields{
+		loggingpkg.LogFields{
 			"pubsub_system": conf.PubSubSystem,
 			"config":        conf,
 		})
@@ -71,7 +75,7 @@ func NewService(conf *Config, log ServiceLogger, ctx context.Context, deps Servi
 
 	factory := deps.TransportFactory
 	if factory == nil {
-		factory = defaultTransportFactory()
+		factory = transportpkg.DefaultFactory()
 	}
 	transport, err := factory.Build(ctx, conf, wmLogger)
 	if err != nil {

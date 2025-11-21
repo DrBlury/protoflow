@@ -10,6 +10,10 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message/router/middleware"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+
+	idspkg "github.com/drblury/protoflow/internal/runtime/ids"
+	jsoncodec "github.com/drblury/protoflow/internal/runtime/jsoncodec"
+	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 )
 
 // MiddlewareBuilder constructs a handler middleware using the provided service instance.
@@ -67,7 +71,7 @@ func CorrelationIDMiddleware() MiddlewareRegistration {
 }
 
 // LogMessagesMiddleware logs the full payload and metadata of handled messages.
-func LogMessagesMiddleware(logger ServiceLogger) MiddlewareRegistration {
+func LogMessagesMiddleware(logger loggingpkg.ServiceLogger) MiddlewareRegistration {
 	return MiddlewareRegistration{
 		Name: "log_messages",
 		Builder: func(s *Service) (message.HandlerMiddleware, error) {
@@ -182,7 +186,7 @@ func (s *Service) correlationIDMiddleware() message.HandlerMiddleware {
 	return func(h message.HandlerFunc) message.HandlerFunc {
 		return func(msg *message.Message) ([]*message.Message, error) {
 			if _, ok := msg.Metadata["correlation_id"]; !ok {
-				msg.Metadata["correlation_id"] = CreateULID()
+				msg.Metadata["correlation_id"] = idspkg.CreateULID()
 			}
 			return h(msg)
 		}
@@ -217,7 +221,7 @@ func (s *Service) protoValidateMiddleware() message.HandlerMiddleware {
 			}
 
 			protoMsg := newProtoFunc()
-			if err := Unmarshal(msg.Payload, protoMsg); err != nil {
+			if err := jsoncodec.Unmarshal(msg.Payload, protoMsg); err != nil {
 				slog.Error("failed to unmarshal protobuf message", "error", err, "event_message_schema", eventType)
 				return nil, &UnprocessableEventError{
 					eventMessage: string(msg.Payload),
@@ -258,10 +262,10 @@ func (s *Service) poisonMiddlewareWithFilter(filter func(err error) bool) (messa
 }
 
 // logMessagesMiddleware logs all processed messages with their metadata.
-func (s *Service) logMessagesMiddleware(logger ServiceLogger) message.HandlerMiddleware {
+func (s *Service) logMessagesMiddleware(logger loggingpkg.ServiceLogger) message.HandlerMiddleware {
 	return func(h message.HandlerFunc) message.HandlerFunc {
 		return func(msg *message.Message) ([]*message.Message, error) {
-			logger.Info("Processing message", LogFields{
+			logger.Info("Processing message", loggingpkg.LogFields{
 				"message_uuid": msg.UUID,
 				"payload":      string(msg.Payload),
 				"metadata":     msg.Metadata,

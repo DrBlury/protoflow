@@ -16,6 +16,8 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	configpkg "github.com/drblury/protoflow/internal/runtime/config"
+	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 	transportpkg "github.com/drblury/protoflow/internal/runtime/transport"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -25,8 +27,8 @@ func newTestSlogLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
 }
 
-func newTestLogger() ServiceLogger {
-	return NewSlogServiceLogger(newTestSlogLogger())
+func newTestLogger() loggingpkg.ServiceLogger {
+	return loggingpkg.NewSlogServiceLogger(newTestSlogLogger())
 }
 
 func TestNewServiceConfiguresKafka(t *testing.T) {
@@ -53,7 +55,7 @@ func TestNewServiceConfiguresKafka(t *testing.T) {
 		return sub, nil
 	}
 
-	cfg := &Config{
+	cfg := &configpkg.Config{
 		PubSubSystem:       "kafka",
 		KafkaBrokers:       []string{"b1"},
 		KafkaConsumerGroup: "group",
@@ -114,7 +116,7 @@ func TestNewServiceConfiguresRabbitMQ(t *testing.T) {
 		return sub, nil
 	}
 
-	cfg := &Config{
+	cfg := &configpkg.Config{
 		PubSubSystem: "rabbitmq",
 		RabbitMQURL:  "amqp://guest:guest@localhost",
 		PoisonQueue:  "poison",
@@ -167,7 +169,7 @@ func TestNewServiceConfiguresAWS(t *testing.T) {
 		return sub, nil
 	}
 
-	cfg := &Config{
+	cfg := &configpkg.Config{
 		PubSubSystem: "aws",
 		AWSRegion:    "eu-west-1",
 		AWSAccountID: "123456789012",
@@ -196,15 +198,15 @@ func TestNewServicePanicsWhenFactoryFails(t *testing.T) {
 		}
 	}()
 
-	NewService(&Config{PubSubSystem: "custom"}, logger, context.Background(), deps)
+	NewService(&configpkg.Config{PubSubSystem: "custom"}, logger, context.Background(), deps)
 }
 
 func TestNewServiceExposesProvidedLogger(t *testing.T) {
 	pub := &testPublisher{}
 	sub := &testSubscriber{}
 	logger := newTestLogger()
-	svc := NewService(&Config{PubSubSystem: "custom"}, logger, context.Background(), ServiceDependencies{
-		TransportFactory:          failingTransportFactory{transport: Transport{Publisher: pub, Subscriber: sub}},
+	svc := NewService(&configpkg.Config{PubSubSystem: "custom"}, logger, context.Background(), ServiceDependencies{
+		TransportFactory:          failingTransportFactory{transport: transportpkg.Transport{Publisher: pub, Subscriber: sub}},
 		DisableDefaultMiddlewares: true,
 	})
 
@@ -223,7 +225,7 @@ func TestNewServiceUnsupportedPubSubPanics(t *testing.T) {
 		}
 	}()
 
-	NewService(&Config{PubSubSystem: "gcp"}, newTestLogger(), context.Background(), ServiceDependencies{})
+	NewService(&configpkg.Config{PubSubSystem: "gcp"}, newTestLogger(), context.Background(), ServiceDependencies{})
 }
 
 func TestServiceStartReturnsWhenContextCancelled(t *testing.T) {
@@ -359,13 +361,13 @@ func TestUnprocessableEventError(t *testing.T) {
 }
 
 type failingTransportFactory struct {
-	transport Transport
+	transport transportpkg.Transport
 	err       error
 }
 
-func (f failingTransportFactory) Build(ctx context.Context, conf *Config, logger watermill.LoggerAdapter) (Transport, error) {
+func (f failingTransportFactory) Build(ctx context.Context, conf *configpkg.Config, logger watermill.LoggerAdapter) (transportpkg.Transport, error) {
 	if f.err != nil {
-		return Transport{}, f.err
+		return transportpkg.Transport{}, f.err
 	}
 	return f.transport, nil
 }

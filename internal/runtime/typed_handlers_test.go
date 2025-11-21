@@ -7,13 +7,14 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
+	idspkg "github.com/drblury/protoflow/internal/runtime/ids"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestBuildProtoHandlerUnmarshalsPayload(t *testing.T) {
 	prototype := MustProtoMessage[*structpb.Struct]()
-	handler, err := handlerpkg.BuildProtoHandler(prototype, func(ctx context.Context, evt ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+	handler, err := handlerpkg.BuildProtoHandler(prototype, func(ctx context.Context, evt handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
 		if ctx == nil {
 			t.Fatalf("context should not be nil")
 		}
@@ -24,7 +25,7 @@ func TestBuildProtoHandlerUnmarshalsPayload(t *testing.T) {
 			t.Fatalf("expected metadata")
 		}
 		evt.Metadata["processed_by"] = "typed_handler"
-		return []ProtoMessageOutput{{
+		return []handlerpkg.ProtoMessageOutput{{
 			Message: exampleStruct("processed"),
 		}}, nil
 	}, nil, NewMessageFromProto)
@@ -36,7 +37,7 @@ func TestBuildProtoHandlerUnmarshalsPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to marshal proto: %v", err)
 	}
-	msg := message.NewMessage(CreateULID(), payload)
+	msg := message.NewMessage(idspkg.CreateULID(), payload)
 	msg.Metadata = message.Metadata{"origin": "test"}
 
 	produced, err := handler(msg)
@@ -53,10 +54,10 @@ func TestBuildProtoHandlerUnmarshalsPayload(t *testing.T) {
 
 func TestBuildProtoHandlerHonoursCustomMetadata(t *testing.T) {
 	prototype := MustProtoMessage[*structpb.Struct]()
-	handler, err := handlerpkg.BuildProtoHandler(prototype, func(ctx context.Context, evt ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+	handler, err := handlerpkg.BuildProtoHandler(prototype, func(ctx context.Context, evt handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
 		md := evt.CloneMetadata()
 		md["origin"] = "cloned"
-		return []ProtoMessageOutput{{
+		return []handlerpkg.ProtoMessageOutput{{
 			Message:  &structpb.Struct{},
 			Metadata: md,
 		}}, nil
@@ -65,7 +66,7 @@ func TestBuildProtoHandlerHonoursCustomMetadata(t *testing.T) {
 		t.Fatalf("unexpected error building handler: %v", err)
 	}
 
-	msg := message.NewMessage(CreateULID(), []byte(`{}`))
+	msg := message.NewMessage(idspkg.CreateULID(), []byte(`{}`))
 	produced, err := handler(msg)
 	if err != nil {
 		t.Fatalf("handler returned error: %v", err)
@@ -77,8 +78,8 @@ func TestBuildProtoHandlerHonoursCustomMetadata(t *testing.T) {
 
 func TestRegisterProtoHandlerValidations(t *testing.T) {
 	svc := newTestService(t)
-	err := RegisterProtoHandler(nil, ProtoHandlerRegistration[*structpb.Struct]{
-		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+	err := RegisterProtoHandler(nil, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
+		Handler: func(context.Context, handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
 			return nil, nil
 		},
 	})
@@ -86,7 +87,7 @@ func TestRegisterProtoHandlerValidations(t *testing.T) {
 		t.Fatalf("expected error when service nil")
 	}
 
-	err = RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
+	err = RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		ConsumeQueue: "queue",
 		Handler:      nil,
 	})
@@ -94,10 +95,10 @@ func TestRegisterProtoHandlerValidations(t *testing.T) {
 		t.Fatalf("expected error when handler nil")
 	}
 
-	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
+	if err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
-		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+		Handler: func(context.Context, handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
 			return nil, nil
 		},
 	}); err != nil {
@@ -106,11 +107,11 @@ func TestRegisterProtoHandlerValidations(t *testing.T) {
 	if _, ok := svc.router.Handlers()[fmt.Sprintf("%T-Handler", &structpb.Struct{})]; !ok {
 		t.Fatalf("typed handler not registered")
 	}
-	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
+	if err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		Name:         "typed_inferred",
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
-		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+		Handler: func(context.Context, handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
 			return nil, nil
 		},
 	}); err != nil {
@@ -126,14 +127,14 @@ func TestRegisterProtoHandlerRegistersPublishTypes(t *testing.T) {
 	primary := MustProtoMessage[*structpb.Struct]()
 	extra := MustProtoMessage[*structpb.ListValue]()
 
-	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
+	if err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		Name:         "typed",
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
-		Options: []ProtoHandlerOption{
-			WithPublishMessageTypes(primary, extra),
+		Options: []handlerpkg.ProtoHandlerOption{
+			handlerpkg.WithPublishMessageTypes(primary, extra),
 		},
-		Handler: func(context.Context, ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
+		Handler: func(context.Context, handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
 			return nil, nil
 		},
 	}); err != nil {

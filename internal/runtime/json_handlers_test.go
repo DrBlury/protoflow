@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+	errspkg "github.com/drblury/protoflow/internal/runtime/errors"
 	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
+	idspkg "github.com/drblury/protoflow/internal/runtime/ids"
 )
 
 func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
-	handler, err := handlerpkg.BuildJSONHandler(func(ctx context.Context, evt JSONMessageContext[*jsonIncoming]) ([]JSONMessageOutput[*jsonOutgoing], error) {
+	handler, err := handlerpkg.BuildJSONHandler(func(ctx context.Context, evt handlerpkg.JSONMessageContext[*jsonIncoming]) ([]handlerpkg.JSONMessageOutput[*jsonOutgoing], error) {
 		if ctx == nil {
 			t.Fatalf("context should not be nil")
 		}
@@ -20,7 +22,7 @@ func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
 		}
 		md := evt.CloneMetadata()
 		md["processed"] = "true"
-		return []JSONMessageOutput[*jsonOutgoing]{
+		return []handlerpkg.JSONMessageOutput[*jsonOutgoing]{
 			{
 				Message:  &jsonOutgoing{ID: evt.Payload.ID, Processed: time.Unix(100, 0)},
 				Metadata: md,
@@ -31,7 +33,7 @@ func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
 		t.Fatalf("unexpected error building handler: %v", err)
 	}
 
-	msg := message.NewMessage(CreateULID(), []byte(`{"id":42}`))
+	msg := message.NewMessage(idspkg.CreateULID(), []byte(`{"id":42}`))
 	msg.Metadata = message.Metadata{"origin": "test"}
 
 	produced, err := handler(msg)
@@ -52,12 +54,12 @@ func TestBuildJSONHandlerProcessesPayload(t *testing.T) {
 func TestRegisterJSONHandlerValidations(t *testing.T) {
 	svc := newTestService(t)
 
-	err := RegisterJSONHandler(nil, JSONHandlerRegistration[*struct{}, *struct{}]{})
+	err := RegisterJSONHandler(nil, handlerpkg.JSONHandlerRegistration[*struct{}, *struct{}]{})
 	if err == nil {
 		t.Fatalf("expected error when service nil")
 	}
 
-	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*struct{}, *struct{}]{
+	err = RegisterJSONHandler(svc, handlerpkg.JSONHandlerRegistration[*struct{}, *struct{}]{
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
 		Handler:      nil,
@@ -66,22 +68,22 @@ func TestRegisterJSONHandlerValidations(t *testing.T) {
 		t.Fatalf("expected error when handler missing")
 	}
 
-	err = RegisterJSONHandler(svc, JSONHandlerRegistration[struct{}, *outgoingMessage]{
+	err = RegisterJSONHandler(svc, handlerpkg.JSONHandlerRegistration[struct{}, *outgoingMessage]{
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
-		Handler: func(context.Context, JSONMessageContext[struct{}]) ([]JSONMessageOutput[*outgoingMessage], error) {
+		Handler: func(context.Context, handlerpkg.JSONMessageContext[struct{}]) ([]handlerpkg.JSONMessageOutput[*outgoingMessage], error) {
 			return nil, nil
 		},
 	})
-	if !errors.Is(err, ErrConsumeMessagePointerNeeded) {
+	if !errors.Is(err, errspkg.ErrConsumeMessagePointerNeeded) {
 		t.Fatalf("expected pointer error, got %v", err)
 	}
 
-	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{
+	err = RegisterJSONHandler(svc, handlerpkg.JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{
 		Name:         "json_handler",
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
-		Handler: func(context.Context, JSONMessageContext[*incomingMessage]) ([]JSONMessageOutput[*outgoingMessage], error) {
+		Handler: func(context.Context, handlerpkg.JSONMessageContext[*incomingMessage]) ([]handlerpkg.JSONMessageOutput[*outgoingMessage], error) {
 			return nil, nil
 		},
 	})
@@ -92,11 +94,11 @@ func TestRegisterJSONHandlerValidations(t *testing.T) {
 		t.Fatalf("json handler not registered")
 	}
 
-	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{
+	err = RegisterJSONHandler(svc, handlerpkg.JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{
 		Name:         "json_handler_inferred",
 		ConsumeQueue: "queue",
 		PublishQueue: "out",
-		Handler: func(context.Context, JSONMessageContext[*incomingMessage]) ([]JSONMessageOutput[*outgoingMessage], error) {
+		Handler: func(context.Context, handlerpkg.JSONMessageContext[*incomingMessage]) ([]handlerpkg.JSONMessageOutput[*outgoingMessage], error) {
 			return nil, nil
 		},
 	})

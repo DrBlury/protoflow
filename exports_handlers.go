@@ -2,25 +2,26 @@ package protoflow
 
 import (
 	runtimepkg "github.com/drblury/protoflow/internal/runtime"
+	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
 	"google.golang.org/protobuf/proto"
 )
 
 type (
 	MessageHandlerRegistration                = runtimepkg.MessageHandlerRegistration
-	JSONHandlerRegistration[T any, O any]     = runtimepkg.JSONHandlerRegistration[T, O]
-	JSONMessageContext[T any]                 = runtimepkg.JSONMessageContext[T]
-	JSONMessageOutput[T any]                  = runtimepkg.JSONMessageOutput[T]
-	JSONMessageHandler[T any, O any]          = runtimepkg.JSONMessageHandler[T, O]
-	ProtoHandlerRegistration[T proto.Message] = runtimepkg.ProtoHandlerRegistration[T]
-	ProtoHandlerOption                        = runtimepkg.ProtoHandlerOption
-	ProtoMessageContext[T proto.Message]      = runtimepkg.ProtoMessageContext[T]
-	ProtoMessageOutput                        = runtimepkg.ProtoMessageOutput
-	ProtoMessageHandler[T proto.Message]      = runtimepkg.ProtoMessageHandler[T]
+	JSONHandlerRegistration[T any, O any]     = handlerpkg.JSONHandlerRegistration[T, O]
+	JSONMessageContext[T any]                 = handlerpkg.JSONMessageContext[T]
+	JSONMessageOutput[T any]                  = handlerpkg.JSONMessageOutput[T]
+	JSONMessageHandler[T any, O any]          = handlerpkg.JSONMessageHandler[T, O]
+	ProtoHandlerRegistration[T proto.Message] = handlerpkg.ProtoHandlerRegistration[T]
+	ProtoHandlerOption                        = handlerpkg.ProtoHandlerOption
+	ProtoMessageContext[T proto.Message]      = handlerpkg.ProtoMessageContext[T]
+	ProtoMessageOutput                        = handlerpkg.ProtoMessageOutput
+	ProtoMessageHandler[T proto.Message]      = handlerpkg.ProtoMessageHandler[T]
 )
 
 var (
 	RegisterMessageHandler  = runtimepkg.RegisterMessageHandler
-	WithPublishMessageTypes = runtimepkg.WithPublishMessageTypes
+	WithPublishMessageTypes = handlerpkg.WithPublishMessageTypes
 )
 
 func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration[T, O]) error {

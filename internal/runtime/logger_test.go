@@ -4,19 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+
+	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 )
 
 func TestEntryServiceLogger(t *testing.T) {
 	entry := newFakeEntry()
-	logger := NewEntryServiceLogger(entry)
+	logger := loggingpkg.NewEntryServiceLogger(entry)
 
-	logger.Info("boot", LogFields{"system": "test"})
+	logger.Info("boot", loggingpkg.LogFields{"system": "test"})
 
-	child := logger.With(LogFields{"base": "value"})
-	child.Debug("child", LogFields{"child": "value"})
+	child := logger.With(loggingpkg.LogFields{"base": "value"})
+	child.Debug("child", loggingpkg.LogFields{"child": "value"})
 
 	boom := errors.New("boom")
-	child.Error("child failed", boom, LogFields{"child": "value"})
+	child.Error("child failed", boom, loggingpkg.LogFields{"child": "value"})
 
 	child.Trace("trace", nil)
 
@@ -50,7 +52,7 @@ func TestEntryServiceLogger(t *testing.T) {
 
 type fakeEntry struct {
 	recorder *entryRecorder
-	fields   LogFields
+	fields   loggingpkg.LogFields
 	err      error
 }
 
@@ -61,7 +63,7 @@ type entryRecorder struct {
 type loggedEntry struct {
 	level  string
 	msg    string
-	fields LogFields
+	fields loggingpkg.LogFields
 	err    error
 }
 
@@ -99,7 +101,7 @@ func (f *fakeEntry) WithError(err error) *fakeEntry {
 func (f *fakeEntry) WithField(key string, value any) *fakeEntry {
 	clone := f.clone()
 	if clone.fields == nil {
-		clone.fields = make(LogFields)
+		clone.fields = make(loggingpkg.LogFields)
 	}
 	clone.fields[key] = value
 	return clone
@@ -116,11 +118,11 @@ func (f *fakeEntry) append(level string, args ...any) {
 	f.recorder.logs = append(f.recorder.logs, entry)
 }
 
-func cloneFields(fields LogFields) LogFields {
+func cloneFields(fields loggingpkg.LogFields) loggingpkg.LogFields {
 	if len(fields) == 0 {
 		return nil
 	}
-	out := make(LogFields, len(fields))
+	out := make(loggingpkg.LogFields, len(fields))
 	for k, v := range fields {
 		out[k] = v
 	}

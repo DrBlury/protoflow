@@ -1,18 +1,18 @@
 package protoflow
 
-import runtimepkg "github.com/drblury/protoflow/internal/runtime"
+import loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 
 type (
-	LogFields                 = runtimepkg.LogFields
-	ServiceLogger             = runtimepkg.ServiceLogger
-	EntryLogger               = runtimepkg.EntryLogger
-	EntryLoggerAdapter[T any] = runtimepkg.EntryLoggerAdapter[T]
+	LogFields                 = loggingpkg.LogFields
+	ServiceLogger             = loggingpkg.ServiceLogger
+	EntryLogger               = loggingpkg.EntryLogger
+	EntryLoggerAdapter[T any] = loggingpkg.EntryLoggerAdapter[T]
 )
 
 var (
-	NewSlogServiceLogger = runtimepkg.NewSlogServiceLogger
+	NewSlogServiceLogger = loggingpkg.NewSlogServiceLogger
 )
 
 func NewEntryServiceLogger[T EntryLoggerAdapter[T]](entry T) ServiceLogger {
-	return runtimepkg.NewEntryServiceLogger[T](entry)
+	return loggingpkg.NewEntryServiceLogger(entry)
 }

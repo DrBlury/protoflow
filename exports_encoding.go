@@ -1,11 +1,11 @@
 package protoflow
 
-import runtimepkg "github.com/drblury/protoflow/internal/runtime"
+import jsoncodec "github.com/drblury/protoflow/internal/runtime/jsoncodec"
 
 var (
-	Marshal       = runtimepkg.Marshal
-	MarshalIndent = runtimepkg.MarshalIndent
-	Unmarshal     = runtimepkg.Unmarshal
-	Encode        = runtimepkg.Encode
-	Decode        = runtimepkg.Decode
+	Marshal       = jsoncodec.Marshal
+	MarshalIndent = jsoncodec.MarshalIndent
+	Unmarshal     = jsoncodec.Unmarshal
+	Encode        = jsoncodec.Encode
+	Decode        = jsoncodec.Decode
 )

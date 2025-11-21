@@ -7,6 +7,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"google.golang.org/protobuf/proto"
+
+	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 )
 
 type testPublisher struct {
@@ -87,7 +89,7 @@ func (o *testOutbox) Records() []outboxRecord {
 func newTestService(t *testing.T) *Service {
 	t.Helper()
 	log := newTestLogger()
-	wmLogger := newWatermillLogger(log)
+	wmLogger := loggingpkg.NewWatermillAdapter(log)
 	router, err := message.NewRouter(message.RouterConfig{}, wmLogger)
 	if err != nil {
 		t.Fatalf("router init failed: %v", err)

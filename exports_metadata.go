@@ -1,7 +1,7 @@
 package protoflow
 
-import runtimepkg "github.com/drblury/protoflow/internal/runtime"
+import metadatapkg "github.com/drblury/protoflow/internal/runtime/metadata"
 
-type Metadata = runtimepkg.Metadata
+type Metadata = metadatapkg.Metadata
 
-var NewMetadata = runtimepkg.NewMetadata
+var NewMetadata = metadatapkg.New

@@ -5,6 +5,8 @@ import (
 
 	"github.com/ThreeDotsLabs/watermill/message"
 	"google.golang.org/protobuf/proto"
+
+	errspkg "github.com/drblury/protoflow/internal/runtime/errors"
 )
 
 type handlerRegistration struct {
@@ -30,7 +32,7 @@ type MessageHandlerRegistration struct {
 // RegisterMessageHandler attaches the provided handler to the service router.
 func RegisterMessageHandler(svc *Service, cfg MessageHandlerRegistration) error {
 	if svc == nil {
-		return ErrServiceRequired
+		return errspkg.ErrServiceRequired
 	}
 
 	return svc.registerHandler(handlerRegistration{
@@ -45,10 +47,10 @@ func RegisterMessageHandler(svc *Service, cfg MessageHandlerRegistration) error 
 
 func (s *Service) registerHandler(cfg handlerRegistration) error {
 	if cfg.Handler == nil {
-		return ErrHandlerRequired
+		return errspkg.ErrHandlerRequired
 	}
 	if cfg.ConsumeQueue == "" {
-		return ErrConsumeQueueRequired
+		return errspkg.ErrConsumeQueueRequired
 	}
 	if cfg.Subscriber == nil {
 		cfg.Subscriber = s.subscriber
@@ -63,7 +65,7 @@ func (s *Service) registerHandler(cfg handlerRegistration) error {
 		}
 	}
 	if cfg.Name == "" {
-		return ErrHandlerNameRequired
+		return errspkg.ErrHandlerNameRequired
 	}
 
 	s.router.AddHandler(

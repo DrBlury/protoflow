@@ -1,34 +1,15 @@
 package runtime
 
 import (
+	errspkg "github.com/drblury/protoflow/internal/runtime/errors"
 	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
 	"google.golang.org/protobuf/proto"
 )
 
-// ProtoHandlerRegistration configures a typed protobuf handler that automatically
-// unmarshals incoming payloads and marshals emitted events.
-type ProtoHandlerRegistration[T proto.Message] = handlerpkg.ProtoHandlerRegistration[T]
-
-// ProtoHandlerOption customises handler registration.
-type ProtoHandlerOption = handlerpkg.ProtoHandlerOption
-
-// WithPublishMessageTypes registers extra proto schemas emitted by this handler.
-// Use this when the handler may emit multiple message types.
-var WithPublishMessageTypes = handlerpkg.WithPublishMessageTypes
-
-// ProtoMessageContext provides strongly typed access to the incoming message payload.
-type ProtoMessageContext[T proto.Message] = handlerpkg.ProtoMessageContext[T]
-
-// ProtoMessageOutput describes an event that should be emitted after the handler succeeds.
-type ProtoMessageOutput = handlerpkg.ProtoMessageOutput
-
-// ProtoMessageHandler processes a typed protobuf payload and returns the events to emit.
-type ProtoMessageHandler[T proto.Message] = handlerpkg.ProtoMessageHandler[T]
-
 // RegisterProtoHandler converts the typed handler into a Watermill handler and registers it on the Service router.
-func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistration[T]) error {
+func RegisterProtoHandler[T proto.Message](svc *Service, cfg handlerpkg.ProtoHandlerRegistration[T]) error {
 	if svc == nil {
-		return ErrServiceRequired
+		return errspkg.ErrServiceRequired
 	}
 
 	var zero T
