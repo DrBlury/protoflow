@@ -40,10 +40,10 @@ func NewMessageFromProto(event proto.Message, metadata Metadata) (*message.Messa
 // PublishProto marshals the proto payload and publishes it to the provided topic.
 func PublishProto(ctx context.Context, publisher message.Publisher, topic string, event proto.Message, metadata Metadata) error {
 	if publisher == nil {
-		return errors.New("publisher is required")
+		return ErrPublisherRequired
 	}
 	if topic == "" {
-		return errors.New("topic is required")
+		return ErrTopicRequired
 	}
 
 	msg, err := NewMessageFromProto(event, metadata)

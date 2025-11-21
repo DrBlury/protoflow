@@ -2,6 +2,7 @@ package protoflow
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -71,8 +72,8 @@ func TestRegisterJSONHandlerValidations(t *testing.T) {
 			return nil, nil
 		},
 	})
-	if err == nil {
-		t.Fatalf("expected error when consume type is not a pointer")
+	if !errors.Is(err, ErrConsumeMessagePointerNeeded) {
+		t.Fatalf("expected pointer error, got %v", err)
 	}
 
 	err = RegisterJSONHandler(svc, JSONHandlerRegistration[*incomingMessage, *outgoingMessage]{

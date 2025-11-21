@@ -59,8 +59,7 @@ func registerHandlers(svc *protoflow.Service) {
 				OrderId: evt.Payload.GetOrderId(),
 				Status:  "processed",
 			}
-			metadata := evt.CloneMetadata()
-			metadata["processed_by"] = "proto-handler"
+			metadata := evt.Metadata.With("processed_by", "proto-handler")
 			return []protoflow.ProtoMessageOutput{{Message: out, Metadata: metadata}}, nil
 		},
 		Options: []protoflow.ProtoHandlerOption{
@@ -73,8 +72,7 @@ func registerHandlers(svc *protoflow.Service) {
 		ConsumeQueue: "json.orders",
 		PublishQueue: "json.audit",
 		Handler: func(ctx context.Context, evt protoflow.JSONMessageContext[*incomingJSON]) ([]protoflow.JSONMessageOutput[*outgoingJSON], error) {
-			metadata := evt.CloneMetadata()
-			metadata["json_seen"] = time.Now().UTC().Format(time.RFC3339)
+			metadata := evt.Metadata.With("json_seen", time.Now().UTC().Format(time.RFC3339))
 			return []protoflow.JSONMessageOutput[*outgoingJSON]{
 				{Message: &outgoingJSON{ID: evt.Payload.ID, Status: "ok"}, Metadata: metadata},
 			}, nil

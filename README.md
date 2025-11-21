@@ -44,13 +44,11 @@ err := protoflow.RegisterJSONHandler(svc, protoflow.JSONHandlerRegistration[*Inc
         response := &OutgoingOrder{ID: evt.Payload.ID}
         return []protoflow.JSONMessageOutput[*OutgoingOrder]{{
             Message:  response,
-            Metadata: evt.CloneMetadata(),
+            Metadata: evt.Metadata.With("processed_by", "json-handler"),
         }}, nil
     },
 })
 ```
-
-Protoflow now infers the consume schema for both JSON and protobuf handler registrations directly from the generic parameters, so you no longer need to pass prototype instances. Use `protoflow.WithPublishMessageTypes` when you want the service to pre-register protobuf types that a handler emits.
 
 ### Producing events
 

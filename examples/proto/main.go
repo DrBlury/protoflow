@@ -35,8 +35,7 @@ func main() {
 				OrderId: evt.Payload.GetOrderId(),
 				Status:  "processed",
 			}
-			metadata := evt.CloneMetadata()
-			metadata["event_version"] = "v1"
+			metadata := evt.Metadata.With("event_version", "v1")
 			return []protoflow.ProtoMessageOutput{{
 				Message:  processed,
 				Metadata: metadata,

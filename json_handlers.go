@@ -40,7 +40,7 @@ type JSONMessageHandler[T any, O any] func(ctx context.Context, event JSONMessag
 // RegisterJSONHandler converts the typed JSON handler into a Watermill handler and registers it.
 func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration[T, O]) error {
 	if svc == nil {
-		return errors.New("event service is required")
+		return ErrServiceRequired
 	}
 
 	wrapped, err := buildJSONHandler(cfg.Handler)
@@ -58,7 +58,7 @@ func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration
 
 func buildJSONHandler[T any, O any](handler JSONMessageHandler[T, O]) (message.HandlerFunc, error) {
 	if handler == nil {
-		return nil, errors.New("json handler function is required")
+		return nil, ErrHandlerRequired
 	}
 
 	prototypeFactory, err := jsonPrototypeFactory[T]()
@@ -91,10 +91,10 @@ func jsonPrototypeFactory[T any]() (func() T, error) {
 	var zero T
 	typ := reflect.TypeOf(zero)
 	if typ == nil {
-		return nil, errors.New("consume message type is required")
+		return nil, ErrConsumeMessageTypeRequired
 	}
 	if typ.Kind() != reflect.Ptr {
-		return nil, errors.New("consume message type must be a pointer")
+		return nil, ErrConsumeMessagePointerNeeded
 	}
 	elem := typ.Elem()
 	return func() T {

@@ -40,11 +40,7 @@ func main() {
 		PublishQueue: "orders.processed.json",
 		Handler: func(ctx context.Context, evt protoflow.JSONMessageContext[*IncomingOrder]) ([]protoflow.JSONMessageOutput[*OutgoingOrder], error) {
 			resp := &OutgoingOrder{OrderID: evt.Payload.OrderID, Status: "processed"}
-			metadata := evt.CloneMetadata()
-			if metadata == nil {
-				metadata = protoflow.Metadata{}
-			}
-			metadata["processed_at"] = time.Now().UTC().Format(time.RFC3339)
+			metadata := evt.Metadata.With("processed_at", time.Now().UTC().Format(time.RFC3339))
 			return []protoflow.JSONMessageOutput[*OutgoingOrder]{
 				{Message: resp, Metadata: metadata},
 			}, nil

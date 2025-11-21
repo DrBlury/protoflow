@@ -1,7 +1,6 @@
 package protoflow
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/ThreeDotsLabs/watermill/message"
@@ -31,7 +30,7 @@ type MessageHandlerRegistration struct {
 // RegisterMessageHandler attaches the provided handler to the service router.
 func RegisterMessageHandler(svc *Service, cfg MessageHandlerRegistration) error {
 	if svc == nil {
-		return errors.New("event service is required")
+		return ErrServiceRequired
 	}
 
 	return svc.registerHandler(handlerRegistration{
@@ -46,10 +45,10 @@ func RegisterMessageHandler(svc *Service, cfg MessageHandlerRegistration) error 
 
 func (s *Service) registerHandler(cfg handlerRegistration) error {
 	if cfg.Handler == nil {
-		return errors.New("handler function is required")
+		return ErrHandlerRequired
 	}
 	if cfg.ConsumeQueue == "" {
-		return errors.New("consume queue is required")
+		return ErrConsumeQueueRequired
 	}
 	if cfg.Subscriber == nil {
 		cfg.Subscriber = s.subscriber
@@ -64,7 +63,7 @@ func (s *Service) registerHandler(cfg handlerRegistration) error {
 		}
 	}
 	if cfg.Name == "" {
-		return errors.New("handler name is required")
+		return ErrHandlerNameRequired
 	}
 
 	s.router.AddHandler(

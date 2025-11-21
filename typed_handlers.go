@@ -60,7 +60,7 @@ type ProtoMessageHandler[T proto.Message] func(ctx context.Context, event ProtoM
 // RegisterProtoHandler converts the typed handler into a Watermill handler and registers it on the Service router.
 func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistration[T]) error {
 	if svc == nil {
-		return errors.New("event service is required")
+		return ErrServiceRequired
 	}
 
 	var zero T
@@ -107,10 +107,10 @@ func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistr
 
 func buildProtoHandler[T proto.Message](prototype T, handler ProtoMessageHandler[T], validate func(proto.Message) error) (message.HandlerFunc, error) {
 	if handler == nil {
-		return nil, errors.New("proto handler function is required")
+		return nil, ErrHandlerRequired
 	}
 	if isNilProto(prototype) {
-		return nil, errors.New("consume message type is required")
+		return nil, ErrConsumeMessageTypeRequired
 	}
 
 	return func(msg *message.Message) ([]*message.Message, error) {
@@ -151,7 +151,7 @@ func buildProtoHandler[T proto.Message](prototype T, handler ProtoMessageHandler
 func clonePrototype[T proto.Message](prototype T) (T, error) {
 	if isNilProto(prototype) {
 		var zero T
-		return zero, errors.New("consume message type is required")
+		return zero, ErrConsumeMessageTypeRequired
 	}
 
 	cloned := proto.Clone(prototype)
@@ -174,10 +174,10 @@ func ensureProtoPrototype[T proto.Message](candidate T) (T, error) {
 	var zero T
 	typ := reflect.TypeOf(candidate)
 	if typ == nil {
-		return zero, errors.New("consume message type is required")
+		return zero, ErrConsumeMessageTypeRequired
 	}
 	if typ.Kind() != reflect.Ptr {
-		return zero, errors.New("consume message type must be a pointer")
+		return zero, ErrConsumeMessagePointerNeeded
 	}
 
 	inst := reflect.New(typ.Elem()).Interface()

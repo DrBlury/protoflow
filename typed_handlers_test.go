@@ -11,7 +11,7 @@ import (
 )
 
 func TestBuildProtoHandlerUnmarshalsPayload(t *testing.T) {
-	prototype := &structpb.Struct{}
+	prototype := MustProtoMessage[*structpb.Struct]()
 	handler, err := buildProtoHandler(prototype, func(ctx context.Context, evt ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
 		if ctx == nil {
 			t.Fatalf("context should not be nil")
@@ -51,7 +51,7 @@ func TestBuildProtoHandlerUnmarshalsPayload(t *testing.T) {
 }
 
 func TestBuildProtoHandlerHonoursCustomMetadata(t *testing.T) {
-	prototype := &structpb.Struct{}
+	prototype := MustProtoMessage[*structpb.Struct]()
 	handler, err := buildProtoHandler(prototype, func(ctx context.Context, evt ProtoMessageContext[*structpb.Struct]) ([]ProtoMessageOutput, error) {
 		md := evt.CloneMetadata()
 		md["origin"] = "cloned"
@@ -122,8 +122,8 @@ func TestRegisterProtoHandlerValidations(t *testing.T) {
 
 func TestRegisterProtoHandlerRegistersPublishTypes(t *testing.T) {
 	svc := newTestService(t)
-	primary := &structpb.Struct{}
-	extra := &structpb.ListValue{}
+	primary := MustProtoMessage[*structpb.Struct]()
+	extra := MustProtoMessage[*structpb.ListValue]()
 
 	if err := RegisterProtoHandler(svc, ProtoHandlerRegistration[*structpb.Struct]{
 		Name:         "typed",
