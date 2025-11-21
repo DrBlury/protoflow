@@ -36,3 +36,14 @@ jobs:
       - name: Build Go module
         working-directory: .
         run: go build ./...
+
+      - name: Run unit tests with coverage
+        working-directory: .
+        run: go test ./... -coverprofile=coverage.out -covermode=atomic
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
