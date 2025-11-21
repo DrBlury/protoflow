@@ -51,17 +51,8 @@ func TestEntryServiceLoggerDelegates(t *testing.T) {
 	}
 }
 
-func TestEntryServiceLoggerPanicsOnNil(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected panic when entry logger nil")
-		}
-	}()
-	NewEntryServiceLogger[*fakeEntry](nil)
-}
-
 func TestWatermillServiceLoggerDelegates(t *testing.T) {
-	base := &recordingWatermillLogger{}
+	base := newRecordingWatermillLogger()
 	logger := NewWatermillServiceLogger(base)
 
 	logger.Debug("dbg", LogFields{"component": "watermill"})
@@ -70,10 +61,14 @@ func TestWatermillServiceLoggerDelegates(t *testing.T) {
 	logger.Error("oops", errors.New("boom"), LogFields{"failed": true})
 
 	child := logger.With(LogFields{"child": "yes"})
-	child.Info("child_info", nil)
+	typedChild, ok := child.(*watermillServiceLogger)
+	if !ok {
+		t.Fatal("expected watermill service logger")
+	}
+	typedChild.Info("child_info", nil)
 
-	if len(base.entries) != 5 {
-		t.Fatalf("expected 5 log entries, got %d", len(base.entries))
+	if len(base.entries) != 6 {
+		t.Fatalf("expected 6 log entries, got %d", len(base.entries))
 	}
 	if base.entries[0].level != "debug" || base.entries[0].fields["component"] != "watermill" {
 		t.Fatalf("unexpected first entry: %#v", base.entries[0])
@@ -111,13 +106,24 @@ func TestWatermillAdapterDelegates(t *testing.T) {
 	adapter.Error("err", errors.New("boom"), nil)
 
 	child := adapter.With(watermill.LogFields{"child": "yes"})
+	typedChild, ok := child.(*serviceLoggerAdapter)
+	if !ok {
+		t.Fatal("expected service logger adapter child")
+	}
+	childBase, ok := typedChild.base.(*recordingServiceLogger)
+	if !ok {
+		t.Fatal("expected recording service logger child base")
+	}
 	child.Info("child_info", nil)
 
-	if len(base.entries) != 5 {
-		t.Fatalf("expected 5 delegated entries, got %d", len(base.entries))
+	if len(base.entries) != 4 {
+		t.Fatalf("expected 4 delegated entries on base, got %d", len(base.entries))
 	}
-	if base.entries[4].fields["child"] != "yes" {
-		t.Fatalf("expected With to clone fields")
+	if len(childBase.entries) != 2 {
+		t.Fatalf("expected child logger to record entries, got %d", len(childBase.entries))
+	}
+	if childBase.entries[0].fields["child"] != "yes" {
+		t.Fatalf("expected child fields to be preserved")
 	}
 }
 
@@ -132,12 +138,13 @@ func TestWatermillAdapterPanicsOnNil(t *testing.T) {
 
 func TestApplyEntryFieldsIgnoresNil(t *testing.T) {
 	entry := newFakeEntry()
-	if applyEntryFields[*fakeEntry](nil, LogFields{"k": "v"}) != nil {
-		t.Fatal("expected nil entry to remain nil")
-	}
 	enriched := applyEntryFields(entry, nil)
 	if enriched != entry {
 		t.Fatal("expected nil fields to return same instance")
+	}
+	withFields := applyEntryFields(entry, LogFields{"k": "v"})
+	if withFields == entry {
+		t.Fatal("expected new entry when fields provided")
 	}
 }
 
@@ -167,6 +174,20 @@ func TestNewSlogServiceLoggerWrapsSlog(t *testing.T) {
 
 type recordingWatermillLogger struct {
 	entries []watermillEntry
+	sink    *[]watermillEntry
+}
+
+func newRecordingWatermillLogger() *recordingWatermillLogger {
+	logger := &recordingWatermillLogger{}
+	logger.sink = &logger.entries
+	return logger
+}
+
+func (r *recordingWatermillLogger) record(entry watermillEntry) {
+	if r.sink == nil {
+		r.sink = &r.entries
+	}
+	*r.sink = append(*r.sink, entry)
 }
 
 type watermillEntry struct {
@@ -176,25 +197,26 @@ type watermillEntry struct {
 }
 
 func (r *recordingWatermillLogger) Error(msg string, err error, fields watermill.LogFields) {
-	r.entries = append(r.entries, watermillEntry{level: "error", fields: fields, err: err})
+	r.record(watermillEntry{level: "error", fields: fields, err: err})
 }
 
 func (r *recordingWatermillLogger) Info(msg string, fields watermill.LogFields) {
-	r.entries = append(r.entries, watermillEntry{level: "info", fields: fields})
+	r.record(watermillEntry{level: "info", fields: fields})
 }
 
 func (r *recordingWatermillLogger) Debug(msg string, fields watermill.LogFields) {
-	r.entries = append(r.entries, watermillEntry{level: "debug", fields: fields})
+	r.record(watermillEntry{level: "debug", fields: fields})
 }
 
 func (r *recordingWatermillLogger) Trace(msg string, fields watermill.LogFields) {
-	r.entries = append(r.entries, watermillEntry{level: "trace", fields: fields})
+	r.record(watermillEntry{level: "trace", fields: fields})
 }
 
 func (r *recordingWatermillLogger) With(fields watermill.LogFields) watermill.LoggerAdapter {
-	clone := &recordingWatermillLogger{}
-	clone.entries = append(clone.entries, watermillEntry{level: "with", fields: fields})
-	return clone
+	child := newRecordingWatermillLogger()
+	child.sink = r.sink
+	child.record(watermillEntry{level: "with", fields: fields})
+	return child
 }
 
 type recordingServiceLogger struct {

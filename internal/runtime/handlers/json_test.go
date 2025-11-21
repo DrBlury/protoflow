@@ -59,7 +59,7 @@ func TestBuildJSONHandlerValidatesInputs(t *testing.T) {
 }
 
 func TestJSONPrototypeFactoryValidations(t *testing.T) {
-	_, err := jsonPrototypeFactory[struct{}]()
+	_, err := jsonPrototypeFactory[any]()
 	if !errors.Is(err, errspkg.ErrConsumeMessageTypeRequired) {
 		t.Fatalf("expected consume type required error, got %v", err)
 	}
