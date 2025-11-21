@@ -100,8 +100,6 @@ Use them as blueprints and swap the broker configuration for your environment.
 
 Run the full test suite with `go test ./...` (or `task test`) before sending changes.
 
-Pushing a semver-style tag (for example `git tag v0.3.0 && git push origin v0.3.0`) triggers the release workflow, and GitHub automatically creates a release from that tag.
-
 ## Contribution guidelines
 
 1. Fork the repo and branch from `main`.
