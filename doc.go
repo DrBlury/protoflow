@@ -1,18 +1,20 @@
-// Package protoflow exposes a small framework on top of Watermill that wires message
-// routers, publishers, subscribers, and middleware for protobuf and JSON driven
-// services. It selects the desired Pub/Sub transport (Kafka, RabbitMQ, or AWS
-// SNS/SQS) from Config, bootstraps the Watermill router, and registers a
-// middleware chain that adds correlation IDs, logging, protobuf validation,
-// outbox persistence, tracing, retries, and poison queue forwarding.
+// Package protoflow is a small layer on top of Watermill that wires routers,
+// publishers, subscribers, and middleware for protobuf- or JSON-driven services.
+// It reads the target transport (Kafka, RabbitMQ, or AWS SNS/SQS) from Config,
+// bootstraps the Watermill router, and registers the default middleware chain
+// for correlation IDs, logging, validation, outbox persistence, tracing,
+// retries, and poison queue forwarding.
 //
-// The Service type hosts the router and offers helpers for registering typed
-// handlers via RegisterProtoHandler or RegisterJSONHandler. Typed registrations
-// automatically marshal/unmarshal payloads, clone metadata safely, and can
-// validate outgoing protobuf events when a ProtoValidator is provided. Service
-// also exposes PublishProto so your HTTP or RPC handlers can emit events without
-// touching the lower-level Watermill APIs.
+// Service hosts the router and exposes typed helpers: RegisterProtoHandler and
+// RegisterJSONHandler take care of marshaling, metadata cloning, and optional
+// protobuf validation, while Service.PublishProto lets HTTP/RPC handlers emit
+// events without touching low-level Watermill APIs. A minimal setup therefore involves
+// filling Config, creating a Service, registering handlers, and calling Start;
+// see README.md for a copy/paste quick start snippet.
 //
-// Advanced users can extend the default middleware chain, plug in an OutboxStore
-// to persist outgoing messages, or provide a ProtoValidator to enforce message
-// contracts. See README.md for a full walkthrough.
+// When you need more control, ServiceDependencies exposes well-scoped hooks:
+// bring your own OutboxStore, ProtoValidator, middleware registrations, or even
+// an entire TransportFactory to plug in custom brokers. The README organises
+// these knobs by topic so you can dive into the exact setting you want to
+// adjust without rereading the whole guide.
 package protoflow
