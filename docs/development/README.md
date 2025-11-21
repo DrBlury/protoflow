@@ -31,3 +31,11 @@ go test ./...
 ```
 
 Use `go test ./internal/runtime/...` when iterating on a specific subsystem.
+
+When you need code coverage, exclude the runnable examples so their `main` packages do not skew the report:
+
+```bash
+go test $(go list ./... | grep -v '/examples/') -coverprofile=coverage.out -covermode=atomic
+```
+
+The examples are still build-tested via `go test ./examples/...` whenever you want to verify them explicitly.

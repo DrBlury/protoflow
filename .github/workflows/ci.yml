@@ -39,7 +39,11 @@ jobs:
 
       - name: Run unit tests with coverage
         working-directory: .
-        run: go test ./... -coverprofile=coverage.out -covermode=atomic
+        run: |
+          set -euo pipefail
+          packages=$(go list ./... | grep -v '/examples/')
+          echo "Running go test on packages:" && echo "$packages"
+          go test $packages -coverprofile=coverage.out -covermode=atomic
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
