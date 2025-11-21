@@ -40,11 +40,10 @@ func awsTransport(ctx context.Context, conf *config.Config, logger watermill.Log
 	if err != nil {
 		return Transport{}, err
 	}
-	logger.Info("Created AWS config",
-		watermill.LogFields{
-			"AWSConfig": cfg,
-		},
-	)
+	logger.Info("Created AWS config", watermill.LogFields{
+		"region":          safeAWSRegion(cfg),
+		"custom_endpoint": hasCustomEndpoint(cfg),
+	})
 
 	publisher, err := createAwsPublisher(conf, logger, cfg)
 	if err != nil {
@@ -60,7 +59,11 @@ func awsTransport(ctx context.Context, conf *config.Config, logger watermill.Log
 func createAWSConfig(ctx context.Context, conf *config.Config, logger watermill.LoggerAdapter) (*aws.Config, error) {
 	cfg, err := AWSDefaultConfigLoader(ctx)
 	if err != nil {
-		logger.Error("Failed to load AWS default config", err, watermill.LogFields{"cfg": cfg})
+		fields := watermill.LogFields{}
+		if conf != nil && conf.AWSRegion != "" {
+			fields["requested_region"] = conf.AWSRegion
+		}
+		logger.Error("Failed to load AWS default config", err, fields)
 		return nil, err
 	}
 	if conf != nil && conf.AWSRegion != "" {
@@ -72,7 +75,7 @@ func createAWSConfig(ctx context.Context, conf *config.Config, logger watermill.
 }
 
 func createAwsPublisher(conf *config.Config, logger watermill.LoggerAdapter, cfg *aws.Config) (message.Publisher, error) {
-	accountID, region := resolveAccountAndRegion(conf, logger)
+	accountID, region := resolveAccountAndRegion(conf, logger, safeAWSRegion(cfg))
 	logger.Info("Create AWS Publisher",
 		watermill.LogFields{
 			"accountID": accountID,
@@ -91,7 +94,7 @@ func createAwsPublisher(conf *config.Config, logger watermill.LoggerAdapter, cfg
 }
 
 func createAwsSubscriber(conf *config.Config, logger watermill.LoggerAdapter, cfg *aws.Config) (message.Subscriber, error) {
-	accountID, region := resolveAccountAndRegion(conf, logger)
+	accountID, region := resolveAccountAndRegion(conf, logger, safeAWSRegion(cfg))
 	topicResolver, err := createTopicResolver(accountID, region, logger)
 	if err != nil {
 		return nil, err
@@ -156,13 +159,16 @@ func addEndpointResolver(cfg *aws.Config, snsOpts []func(*amazonsns.Options), sq
 	return snsOpts, sqsOpts, nil
 }
 
-func resolveAccountAndRegion(conf *config.Config, logger watermill.LoggerAdapter) (string, string) {
+func resolveAccountAndRegion(conf *config.Config, logger watermill.LoggerAdapter, fallbackRegion string) (string, string) {
 	if conf == nil {
-		return "", ""
+		return "", fallbackRegion
 	}
 
 	accountID := strings.Trim(conf.AWSAccountID, "\"' ")
 	region := conf.AWSRegion
+	if region == "" {
+		region = fallbackRegion
+	}
 
 	if accountID == "" && useLocalstackEndpoint(conf) {
 		accountID = localstackAccountID
@@ -231,4 +237,15 @@ func awsEndpointURL(conf *config.Config) (*url.URL, error) {
 	}
 
 	return parsedURL, nil
+}
+
+func safeAWSRegion(cfg *aws.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Region
+}
+
+func hasCustomEndpoint(cfg *aws.Config) bool {
+	return cfg != nil && cfg.BaseEndpoint != nil && *cfg.BaseEndpoint != ""
 }

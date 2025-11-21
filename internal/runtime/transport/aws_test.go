@@ -197,6 +197,23 @@ func TestCreateAwsSubscriberFactoryError(t *testing.T) {
 	}
 }
 
+func TestResolveAccountAndRegionFallsBackToAWSConfigRegion(t *testing.T) {
+	conf := &config.Config{}
+	account, region := resolveAccountAndRegion(conf, watermill.NopLogger{}, "env-region")
+	if account != "" {
+		t.Fatalf("expected empty account, got %s", account)
+	}
+	if region != "env-region" {
+		t.Fatalf("expected fallback region to be used, got %s", region)
+	}
+
+	conf.AWSRegion = "explicit"
+	_, region = resolveAccountAndRegion(conf, watermill.NopLogger{}, "env-region")
+	if region != "explicit" {
+		t.Fatalf("expected explicit config region, got %s", region)
+	}
+}
+
 func TestAddEndpointResolver(t *testing.T) {
 	aCfg := &aws.Config{}
 	snsOpts, sqsOpts, err := addEndpointResolver(aCfg, nil, nil)
