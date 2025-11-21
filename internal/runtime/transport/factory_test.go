@@ -142,111 +142,7 @@ func TestDefaultFactoryBuild(t *testing.T) {
 		}
 	})
 
-	tests := []struct {
-		name  string
-		cfg   *config.Config
-		setup func(t *testing.T) (cleanup func(), pub message.Publisher, sub message.Subscriber)
-	}{
-		{
-			name: "kafka",
-			cfg:  &config.Config{PubSubSystem: "kafka", KafkaBrokers: []string{"broker"}, KafkaConsumerGroup: "group"},
-			setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
-				t.Helper()
-				origPub := KafkaPublisherFactory
-				origSub := KafkaSubscriberFactory
-				pub := &testPublisher{}
-				sub := &testSubscriber{}
-				KafkaPublisherFactory = func(cfg kafka.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
-					if len(cfg.Brokers) == 0 {
-						t.Fatal("expected brokers to be provided")
-					}
-					return pub, nil
-				}
-				KafkaSubscriberFactory = func(cfg kafka.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
-					if cfg.ConsumerGroup == "" {
-						t.Fatal("expected consumer group to be provided")
-					}
-					return sub, nil
-				}
-				return func() {
-					KafkaPublisherFactory = origPub
-					KafkaSubscriberFactory = origSub
-				}, pub, sub
-			},
-		},
-		{
-			name: "rabbitmq",
-			cfg:  &config.Config{PubSubSystem: "rabbitmq", RabbitMQURL: "amqp://guest"},
-			setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
-				t.Helper()
-				origConn := AmqpConnectionFactory
-				origPub := AmqpPublisherFactory
-				origSub := AmqpSubscriberFactory
-				conn := &amqp.ConnectionWrapper{}
-				pub := &testPublisher{}
-				sub := &testSubscriber{}
-				AmqpConnectionFactory = func(cfg amqp.ConnectionConfig, logger watermill.LoggerAdapter) (*amqp.ConnectionWrapper, error) {
-					if cfg.AmqpURI == "" {
-						t.Fatal("expected AMQP URI")
-					}
-					return conn, nil
-				}
-				AmqpPublisherFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Publisher, error) {
-					if c != conn {
-						t.Fatal("unexpected connection passed to publisher factory")
-					}
-					return pub, nil
-				}
-				AmqpSubscriberFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Subscriber, error) {
-					if c != conn {
-						t.Fatal("unexpected connection passed to subscriber factory")
-					}
-					return sub, nil
-				}
-				return func() {
-					AmqpConnectionFactory = origConn
-					AmqpPublisherFactory = origPub
-					AmqpSubscriberFactory = origSub
-				}, pub, sub
-			},
-		},
-		{
-			name: "aws",
-			cfg:  &config.Config{PubSubSystem: "aws", AWSAccountID: "000000000000", AWSRegion: "us-east-1"},
-			setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
-				t.Helper()
-				origLoader := AWSDefaultConfigLoader
-				origTopic := SNSTopicResolverFactory
-				origPub := SNSPublisherFactory
-				origSub := SNSSubscriberFactory
-				pub := &testPublisher{}
-				sub := &testSubscriber{}
-				AWSDefaultConfigLoader = func(ctx context.Context, optFns ...func(*awsconfig.LoadOptions) error) (aws.Config, error) {
-					return aws.Config{Region: "us-east-1"}, nil
-				}
-				SNSTopicResolverFactory = func(accountID, region string) (*sns.GenerateArnTopicResolver, error) {
-					return origTopic(accountID, region)
-				}
-				SNSPublisherFactory = func(cfg sns.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
-					if cfg.TopicResolver == nil {
-						t.Fatal("expected topic resolver to be set")
-					}
-					return pub, nil
-				}
-				SNSSubscriberFactory = func(cfg sns.SubscriberConfig, sqsCfg sqs.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
-					return sub, nil
-				}
-				return func() {
-					AWSDefaultConfigLoader = origLoader
-					SNSTopicResolverFactory = origTopic
-					SNSPublisherFactory = origPub
-					SNSSubscriberFactory = origSub
-				}, pub, sub
-			},
-		},
-	}
-
-	for _, tc := range tests {
+	for _, tc := range []factoryBuildCase{kafkaFactoryCase(), rabbitFactoryCase(), awsFactoryCase()} {
 		t.Run(tc.name, func(t *testing.T) {
 			cleanup, expectedPub, expectedSub := tc.setup(t)
 			if cleanup != nil {
@@ -266,5 +162,117 @@ func TestDefaultFactoryBuild(t *testing.T) {
 func TestDefaultFactoryRequiresConfig(t *testing.T) {
 	if _, err := (defaultFactory{}).Build(context.Background(), nil, watermill.NopLogger{}); err == nil {
 		t.Fatal("expected error when config nil")
+	}
+}
+
+type factoryBuildCase struct {
+	name  string
+	cfg   *config.Config
+	setup func(t *testing.T) (cleanup func(), pub message.Publisher, sub message.Subscriber)
+}
+
+func kafkaFactoryCase() factoryBuildCase {
+	return factoryBuildCase{
+		name: "kafka",
+		cfg:  &config.Config{PubSubSystem: "kafka", KafkaBrokers: []string{"broker"}, KafkaConsumerGroup: "group"},
+		setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
+			t.Helper()
+			origPub := KafkaPublisherFactory
+			origSub := KafkaSubscriberFactory
+			pub := &testPublisher{}
+			sub := &testSubscriber{}
+			KafkaPublisherFactory = func(cfg kafka.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
+				if len(cfg.Brokers) == 0 {
+					t.Fatal("expected brokers to be provided")
+				}
+				return pub, nil
+			}
+			KafkaSubscriberFactory = func(cfg kafka.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
+				if cfg.ConsumerGroup == "" {
+					t.Fatal("expected consumer group to be provided")
+				}
+				return sub, nil
+			}
+			return func() {
+				KafkaPublisherFactory = origPub
+				KafkaSubscriberFactory = origSub
+			}, pub, sub
+		},
+	}
+}
+
+func rabbitFactoryCase() factoryBuildCase {
+	return factoryBuildCase{
+		name: "rabbitmq",
+		cfg:  &config.Config{PubSubSystem: "rabbitmq", RabbitMQURL: "amqp://guest"},
+		setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
+			t.Helper()
+			origConn := AmqpConnectionFactory
+			origPub := AmqpPublisherFactory
+			origSub := AmqpSubscriberFactory
+			conn := &amqp.ConnectionWrapper{}
+			pub := &testPublisher{}
+			sub := &testSubscriber{}
+			AmqpConnectionFactory = func(cfg amqp.ConnectionConfig, logger watermill.LoggerAdapter) (*amqp.ConnectionWrapper, error) {
+				if cfg.AmqpURI == "" {
+					t.Fatal("expected AMQP URI")
+				}
+				return conn, nil
+			}
+			AmqpPublisherFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Publisher, error) {
+				if c != conn {
+					t.Fatal("unexpected connection passed to publisher factory")
+				}
+				return pub, nil
+			}
+			AmqpSubscriberFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, c *amqp.ConnectionWrapper) (message.Subscriber, error) {
+				if c != conn {
+					t.Fatal("unexpected connection passed to subscriber factory")
+				}
+				return sub, nil
+			}
+			return func() {
+				AmqpConnectionFactory = origConn
+				AmqpPublisherFactory = origPub
+				AmqpSubscriberFactory = origSub
+			}, pub, sub
+		},
+	}
+}
+
+func awsFactoryCase() factoryBuildCase {
+	return factoryBuildCase{
+		name: "aws",
+		cfg:  &config.Config{PubSubSystem: "aws", AWSAccountID: "000000000000", AWSRegion: "us-east-1"},
+		setup: func(t *testing.T) (func(), message.Publisher, message.Subscriber) {
+			t.Helper()
+			origLoader := AWSDefaultConfigLoader
+			origTopic := SNSTopicResolverFactory
+			origPub := SNSPublisherFactory
+			origSub := SNSSubscriberFactory
+			pub := &testPublisher{}
+			sub := &testSubscriber{}
+			AWSDefaultConfigLoader = func(ctx context.Context, optFns ...func(*awsconfig.LoadOptions) error) (aws.Config, error) {
+				return aws.Config{Region: "us-east-1"}, nil
+			}
+			SNSTopicResolverFactory = func(accountID, region string) (*sns.GenerateArnTopicResolver, error) {
+				return origTopic(accountID, region)
+			}
+			SNSPublisherFactory = func(cfg sns.PublisherConfig, logger watermill.LoggerAdapter) (message.Publisher, error) {
+				if cfg.TopicResolver == nil {
+					t.Fatal("expected topic resolver to be set")
+				}
+				return pub, nil
+			}
+			SNSSubscriberFactory = func(cfg sns.SubscriberConfig, sqsCfg sqs.SubscriberConfig, logger watermill.LoggerAdapter) (message.Subscriber, error) {
+				return sub, nil
+			}
+			return func() {
+				AWSDefaultConfigLoader = origLoader
+				SNSTopicResolverFactory = origTopic
+				SNSPublisherFactory = origPub
+				SNSSubscriberFactory = origSub
+			}, pub, sub
+		},
 	}
 }
