@@ -1,0 +1,54 @@
+---
+version: 3
+
+tasks:
+  ci:
+    desc: "Run the full GitHub Actions workflow locally"
+    summary: |
+      Uses nektos/act to execute every job defined in the repository workflows for a quick pre-flight CI check.
+    cmds:
+      - echo "Running all GitHub Actions locally via act"
+      - act | grep -v '::'
+
+  act-test:
+    desc: "Run a specific GitHub Actions job via act"
+    summary: |
+      Executes a single workflow job locally. Pass JOB=<name> when invoking.
+    cmds:
+      - echo "Running GitHub Action job '${JOB}' locally"
+      - act --job ${JOB} | grep -v '::'
+
+  lint-go:
+    desc: "Lint the Go sources with golangci-lint"
+    deps:
+      - gen-buf
+    summary: |
+      Builds a Go {{.src_dir}} workspace inside a Go 1.25 container, installs golangci-lint v2.6.2 with the same toolchain, and executes the linter so the binary matches the module's target version.
+    cmds:
+      - |
+        set -euo pipefail
+        echo "Linting Go sources under {{.src_dir}} with Go 1.25"
+        docker run --rm -v "$(pwd)/{{.src_dir}}:/workspace" -w /workspace golang:1.25.1 bash -c '
+          set -euo pipefail
+          export PATH=$PATH:/usr/local/go/bin
+          mkdir -p /tmp/bin
+          GOBIN=/tmp/bin go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.2
+          export PATH="/tmp/bin:$PATH"
+          golangci-lint run ./...
+        '
+
+  scc:
+    desc: "Show source code statistics using scc"
+    summary: |
+      Provides a language-level breakdown of the repository.
+    cmds:
+      - echo "Gathering source code statistics"
+      - docker run --rm -it -v "$PWD:/pwd" ghcr.io/lhoupert/scc:master scc /pwd
+
+  git:web:
+    desc: "Open the configured git remote in a browser"
+    summary: |
+      Invokes scripts/git-web with the provided REMOTE (defaults to origin).
+    cmds:
+      - ./scripts/git-web {{default "origin" .REMOTE}}
+    silent: true

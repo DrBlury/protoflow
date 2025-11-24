@@ -1,0 +1,53 @@
+name: Service CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  GO_VERSION_FILE: go.mod
+
+jobs:
+  go_module:
+    name: Lint & Build Go Module
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6.0.0
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache: true
+
+      - name: Download modules
+        working-directory: .
+        run: go mod download
+
+      - name: Run golangci-lint
+        uses: ./.github/actions/run-golangci-lint
+
+      - name: Build Go module
+        working-directory: .
+        run: go build ./...
+
+      - name: Run unit tests with coverage
+        working-directory: .
+        run: |
+          set -euo pipefail
+          packages=$(go list ./... | grep -v '/examples/')
+          echo "Running go test on packages:" && echo "$packages"
+          go test $packages -coverprofile=coverage.out -covermode=atomic
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.out
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}

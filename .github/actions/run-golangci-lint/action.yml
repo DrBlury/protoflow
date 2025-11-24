@@ -1,0 +1,22 @@
+name: Run golangci-lint
+description: Installs golangci-lint at a specific version and runs it against the Go module.
+inputs:
+  src_dir:
+    description: Directory containing the Go module to lint.
+    required: false
+    default: .
+  lint_version:
+    description: golangci-lint version to install (e.g., v2.6.2)
+    required: false
+    default: v2.6.2
+runs:
+  using: composite
+  steps:
+    - name: Install golangci-lint
+      shell: bash
+      run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${{ inputs.lint_version }}
+
+    - name: Run golangci-lint
+      shell: bash
+      working-directory: ${{ inputs.src_dir }}
+      run: golangci-lint run ./...

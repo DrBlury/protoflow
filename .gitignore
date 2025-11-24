@@ -1,0 +1,21 @@
+# Build outputs
+bin/
+build/
+dist/
+*.test
+
+# Go modules and vendor cache
+vendor/
+
+# Coverage reports
+coverage.out
+coverage/
+*.coverprofile
+
+# IDE and OS metadata
+.vscode/
+.idea/
+.DS_Store
+
+# Task runner artifacts
+.task/
