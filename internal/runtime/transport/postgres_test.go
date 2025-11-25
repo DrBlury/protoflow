@@ -31,7 +31,9 @@ func skipIfNoPostgres(t *testing.T) string {
 	}
 
 	// Clean up schema for clean tests
-	db.Exec("DROP SCHEMA IF EXISTS protoflow_test CASCADE")
+	if _, err := db.Exec("DROP SCHEMA IF EXISTS protoflow_test CASCADE"); err != nil {
+		t.Logf("Warning: failed to clean up test schema: %v", err)
+	}
 
 	return connStr
 }
@@ -222,93 +224,9 @@ func TestPostgresTransport_NackAndRetry(t *testing.T) {
 	}
 }
 
-func TestPostgresTransport_DLQOperations(t *testing.T) {
-	connStr := skipIfNoPostgres(t)
-
-	cfg := PostgresConfig{
-		ConnectionString: connStr,
-		SchemaName:       "protoflow_test",
-		PollInterval:     50 * time.Millisecond,
-		MaxRetries:       0, // Immediately move to DLQ
-	}
-
-	transport, err := NewPostgresTransport(cfg, watermill.NopLogger{})
-	if err != nil {
-		t.Fatalf("failed to create transport: %v", err)
-	}
-	defer transport.Close()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	msgChan, err := transport.Subscribe(ctx, "dlq-topic")
-	if err != nil {
-		t.Fatalf("failed to subscribe: %v", err)
-	}
-
-	// Publish and nack to move to DLQ
-	msg := message.NewMessage(watermill.NewUUID(), []byte("dlq-test"))
-	msg.Metadata.Set("custom", "metadata")
-	if err := transport.Publish("dlq-topic", msg); err != nil {
-		t.Fatalf("failed to publish: %v", err)
-	}
-
-	select {
-	case received := <-msgChan:
-		received.Nack()
-	case <-time.After(2 * time.Second):
-		t.Fatal("timeout waiting for message")
-	}
-
-	// Wait for DLQ move
-	time.Sleep(200 * time.Millisecond)
-
-	// Check DLQ count
-	count, err := transport.GetDLQCount("dlq-topic")
-	if err != nil {
-		t.Fatalf("failed to get DLQ count: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 message in DLQ, got %d", count)
-	}
-
-	// List DLQ messages
-	dlqMsgs, err := transport.ListDLQMessages("dlq-topic", 10, 0)
-	if err != nil {
-		t.Fatalf("failed to list DLQ messages: %v", err)
-	}
-	if len(dlqMsgs) != 1 {
-		t.Fatalf("expected 1 DLQ message, got %d", len(dlqMsgs))
-	}
-	if dlqMsgs[0].Metadata["custom"] != "metadata" {
-		t.Errorf("metadata not preserved in DLQ")
-	}
-
-	// Replay message
-	if err := transport.ReplayDLQMessage(dlqMsgs[0].ID); err != nil {
-		t.Fatalf("failed to replay message: %v", err)
-	}
-
-	// Check DLQ is now empty
-	count, err = transport.GetDLQCount("dlq-topic")
-	if err != nil {
-		t.Fatalf("failed to get DLQ count: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("expected 0 messages in DLQ after replay, got %d", count)
-	}
-
-	// Check message is back in queue
-	pending, err := transport.GetPendingCount("dlq-topic")
-	if err != nil {
-		t.Fatalf("failed to get pending count: %v", err)
-	}
-	if pending != 1 {
-		t.Errorf("expected 1 pending message after replay, got %d", pending)
-	}
-}
-
-func TestPostgresTransport_ReplayAllDLQ(t *testing.T) {
+// setupDLQTestTransport creates a transport configured for DLQ testing with MaxRetries=0.
+func setupDLQTestTransport(t *testing.T, topic string) (*PostgresTransport, context.Context, context.CancelFunc, <-chan *message.Message) {
+	t.Helper()
 	connStr := skipIfNoPostgres(t)
 
 	cfg := PostgresConfig{
@@ -322,15 +240,107 @@ func TestPostgresTransport_ReplayAllDLQ(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to create transport: %v", err)
 	}
-	defer transport.Close()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
 
-	msgChan, err := transport.Subscribe(ctx, "replay-all-topic")
+	msgChan, err := transport.Subscribe(ctx, topic)
 	if err != nil {
+		transport.Close()
+		cancel()
 		t.Fatalf("failed to subscribe: %v", err)
 	}
+
+	return transport, ctx, cancel, msgChan
+}
+
+// publishAndNackToDLQ publishes a message and nacks it to move to DLQ.
+func publishAndNackToDLQ(t *testing.T, transport *PostgresTransport, msgChan <-chan *message.Message, topic string) {
+	t.Helper()
+	msg := message.NewMessage(watermill.NewUUID(), []byte("dlq-test"))
+	msg.Metadata.Set("custom", "metadata")
+	if err := transport.Publish(topic, msg); err != nil {
+		t.Fatalf("failed to publish: %v", err)
+	}
+
+	select {
+	case received := <-msgChan:
+		received.Nack()
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout waiting for message")
+	}
+	time.Sleep(200 * time.Millisecond)
+}
+
+func TestPostgresTransport_DLQOperations(t *testing.T) {
+	transport, _, cancel, msgChan := setupDLQTestTransport(t, "dlq-topic")
+	defer transport.Close()
+	defer cancel()
+
+	publishAndNackToDLQ(t, transport, msgChan, "dlq-topic")
+
+	t.Run("CheckDLQCount", func(t *testing.T) {
+		count, err := transport.GetDLQCount("dlq-topic")
+		if err != nil {
+			t.Fatalf("failed to get DLQ count: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("expected 1 message in DLQ, got %d", count)
+		}
+	})
+
+	t.Run("ListVerifyAndReplay", func(t *testing.T) {
+		dlqMsgs, err := transport.ListDLQMessages("dlq-topic", 10, 0)
+		if err != nil {
+			t.Fatalf("failed to list DLQ messages: %v", err)
+		}
+		if len(dlqMsgs) != 1 {
+			t.Fatalf("expected 1 DLQ message, got %d", len(dlqMsgs))
+		}
+		if dlqMsgs[0].Metadata["custom"] != "metadata" {
+			t.Errorf("metadata not preserved in DLQ")
+		}
+
+		if err := transport.ReplayDLQMessage(dlqMsgs[0].ID); err != nil {
+			t.Fatalf("failed to replay message: %v", err)
+		}
+
+		count, err := transport.GetDLQCount("dlq-topic")
+		if err != nil {
+			t.Fatalf("failed to get DLQ count: %v", err)
+		}
+		if count != 0 {
+			t.Errorf("expected 0 messages in DLQ after replay, got %d", count)
+		}
+
+		pending, err := transport.GetPendingCount("dlq-topic")
+		if err != nil {
+			t.Fatalf("failed to get pending count: %v", err)
+		}
+		if pending != 1 {
+			t.Errorf("expected 1 pending message after replay, got %d", pending)
+		}
+	})
+}
+
+// nackMessages receives and nacks the specified number of messages.
+func nackMessages(t *testing.T, msgChan <-chan *message.Message, count int) {
+	t.Helper()
+	nackedCount := 0
+	for nackedCount < count {
+		select {
+		case received := <-msgChan:
+			received.Nack()
+			nackedCount++
+		case <-time.After(3 * time.Second):
+			t.Fatalf("timeout after nacking %d messages", nackedCount)
+		}
+	}
+}
+
+func TestPostgresTransport_ReplayAllDLQ(t *testing.T) {
+	transport, _, cancel, msgChan := setupDLQTestTransport(t, "replay-all-topic")
+	defer transport.Close()
+	defer cancel()
 
 	// Publish multiple messages
 	for i := 0; i < 3; i++ {
@@ -340,22 +350,9 @@ func TestPostgresTransport_ReplayAllDLQ(t *testing.T) {
 		}
 	}
 
-	// Nack all to move to DLQ
-	nackedCount := 0
-	for nackedCount < 3 {
-		select {
-		case received := <-msgChan:
-			received.Nack()
-			nackedCount++
-		case <-time.After(3 * time.Second):
-			t.Fatalf("timeout after nacking %d messages", nackedCount)
-		}
-	}
-
-	// Wait for DLQ moves
+	nackMessages(t, msgChan, 3)
 	time.Sleep(300 * time.Millisecond)
 
-	// Verify DLQ count
 	count, err := transport.GetDLQCount("replay-all-topic")
 	if err != nil {
 		t.Fatalf("failed to get DLQ count: %v", err)
@@ -364,7 +361,6 @@ func TestPostgresTransport_ReplayAllDLQ(t *testing.T) {
 		t.Fatalf("expected 3 messages in DLQ, got %d", count)
 	}
 
-	// Replay all
 	replayed, err := transport.ReplayAllDLQ("replay-all-topic")
 	if err != nil {
 		t.Fatalf("failed to replay all: %v", err)
@@ -373,7 +369,6 @@ func TestPostgresTransport_ReplayAllDLQ(t *testing.T) {
 		t.Errorf("expected 3 replayed, got %d", replayed)
 	}
 
-	// Verify DLQ is empty
 	count, err = transport.GetDLQCount("replay-all-topic")
 	if err != nil {
 		t.Fatalf("failed to get DLQ count: %v", err)

@@ -138,7 +138,13 @@ func (t *SQLiteTransport) Publish(topic string, messages ...*message.Message) er
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	stmt, err := tx.Prepare(`
 		INSERT INTO messages (uuid, topic, payload, metadata, available_at)
@@ -216,16 +222,31 @@ func (t *SQLiteTransport) pollMessages(ctx context.Context, topic string, msgCha
 	}
 }
 
-func (t *SQLiteTransport) processAvailableMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
-	// Lock and fetch a message
+// fetchedMessage holds the data for a fetched message before it's sent.
+type fetchedMessage struct {
+	id       int64
+	uuid     string
+	payload  []byte
+	metadata string
+}
+
+// fetchAndLockMessage attempts to fetch and lock a single message from the queue.
+// Returns the fetched message data and whether a message was found.
+func (t *SQLiteTransport) fetchAndLockMessage(ctx context.Context, topic string) (*fetchedMessage, bool) {
 	tx, err := t.db.BeginTx(ctx, nil)
 	if err != nil {
 		if t.logger != nil {
 			t.logger.Error("failed to begin transaction", err, nil)
 		}
-		return
+		return nil, false
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	now := time.Now().UTC()
 	lockUntil := now.Add(30 * time.Second)
@@ -241,71 +262,68 @@ func (t *SQLiteTransport) processAvailableMessages(ctx context.Context, topic st
 		LIMIT 1
 	`, topic, now, now)
 
-	var id int64
-	var uuid string
-	var payload []byte
-	var metadataStr string
-
-	if err := row.Scan(&id, &uuid, &payload, &metadataStr); err != nil {
-		if err == sql.ErrNoRows {
-			return // No messages available
-		}
-		if t.logger != nil {
+	var fm fetchedMessage
+	if err := row.Scan(&fm.id, &fm.uuid, &fm.payload, &fm.metadata); err != nil {
+		if err != sql.ErrNoRows && t.logger != nil {
 			t.logger.Error("failed to scan message", err, nil)
 		}
-		return
+		return nil, false
 	}
 
-	// Lock the message
-	_, err = tx.ExecContext(ctx, `
-		UPDATE messages SET locked_until = ? WHERE id = ?
-	`, lockUntil, id)
-	if err != nil {
+	if _, err = tx.ExecContext(ctx, `UPDATE messages SET locked_until = ? WHERE id = ?`, lockUntil, fm.id); err != nil {
 		if t.logger != nil {
 			t.logger.Error("failed to lock message", err, nil)
 		}
-		return
+		return nil, false
 	}
 
 	if err := tx.Commit(); err != nil {
 		if t.logger != nil {
 			t.logger.Error("failed to commit lock", err, nil)
 		}
-		return
+		return nil, false
 	}
 
-	// Parse metadata
-	metadata := make(message.Metadata)
-	if metadataStr != "" {
-		if err := json.Unmarshal([]byte(metadataStr), &metadata); err != nil {
-			if t.logger != nil {
-				t.logger.Error("failed to unmarshal metadata", err, nil)
-			}
-		}
-	}
+	return &fm, true
+}
 
-	msg := message.NewMessage(uuid, payload)
-	msg.Metadata = metadata
-
-	// Send message and wait for ack/nack
+// handleMessageResult waits for ack/nack and handles the message accordingly.
+func (t *SQLiteTransport) handleMessageResult(ctx context.Context, id int64, topic string, msg *message.Message) {
 	select {
-	case msgChan <- msg:
-		// Wait for ack/nack from consumer
-		select {
-		case <-msg.Acked():
-			t.ackMessage(id)
-		case <-msg.Nacked():
-			t.nackMessage(id, topic)
-		case <-ctx.Done():
-			// Context cancelled, unlock the message for retry
-			t.unlockMessage(id)
-		case <-t.closedChan:
-			t.unlockMessage(id)
-		}
+	case <-msg.Acked():
+		t.ackMessage(id)
+	case <-msg.Nacked():
+		t.nackMessage(id, topic)
 	case <-ctx.Done():
 		t.unlockMessage(id)
 	case <-t.closedChan:
 		t.unlockMessage(id)
+	}
+}
+
+func (t *SQLiteTransport) processAvailableMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
+	fm, found := t.fetchAndLockMessage(ctx, topic)
+	if !found {
+		return
+	}
+
+	metadata := make(message.Metadata)
+	if fm.metadata != "" {
+		if err := json.Unmarshal([]byte(fm.metadata), &metadata); err != nil && t.logger != nil {
+			t.logger.Error("failed to unmarshal metadata", err, nil)
+		}
+	}
+
+	msg := message.NewMessage(fm.uuid, fm.payload)
+	msg.Metadata = metadata
+
+	select {
+	case msgChan <- msg:
+		t.handleMessageResult(ctx, fm.id, topic, msg)
+	case <-ctx.Done():
+		t.unlockMessage(fm.id)
+	case <-t.closedChan:
+		t.unlockMessage(fm.id)
 	}
 }
 
@@ -422,7 +440,13 @@ func (t *SQLiteTransport) ReplayDLQMessage(dlqID int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	_, err = tx.Exec(`
 		INSERT INTO messages (uuid, topic, payload, metadata, retry_count)
@@ -447,7 +471,13 @@ func (t *SQLiteTransport) ReplayAllDLQ(topic string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	result, err := tx.Exec(`
 		INSERT INTO messages (uuid, topic, payload, metadata, retry_count)
@@ -499,7 +529,11 @@ func (t *SQLiteTransport) ListDLQMessages(topic string, limit, offset int) ([]DL
 			return nil, err
 		}
 		if metadataStr != "" {
-			json.Unmarshal([]byte(metadataStr), &msg.Metadata)
+			if err := json.Unmarshal([]byte(metadataStr), &msg.Metadata); err != nil {
+				if t.logger != nil {
+					t.logger.Error("failed to unmarshal metadata", err, nil)
+				}
+			}
 		}
 		messages = append(messages, msg)
 	}

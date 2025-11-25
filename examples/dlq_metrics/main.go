@@ -27,34 +27,20 @@ var (
 	ErrProcessingFailed = errors.New("message processing failed")
 )
 
-func main() {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	logger := protoflow.NewSlogServiceLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
-
-	// Create DLQ metrics collector using protoflow's built-in type
-	dlqMetrics := protoflow.NewDLQMetrics(prometheus.DefaultRegisterer)
-	dlqMetrics.Register()
-
-	// Start Prometheus metrics server
-	go func() {
-		http.Handle("/metrics", promhttp.Handler())
-		logger.Info("📊 Prometheus metrics available at http://localhost:2112/metrics", nil)
-		if err := http.ListenAndServe(":2112", nil); err != nil {
-			logger.Error("metrics server error", err, nil)
-		}
-	}()
-
-	cfg := &protoflow.Config{
-		PubSubSystem: "channel",
-		PoisonQueue:  "dlq.poison",
+// setupMetricsServer starts the Prometheus metrics HTTP server.
+func setupMetricsServer(logger protoflow.ServiceLogger) {
+	http.Handle("/metrics", promhttp.Handler())
+	logger.Info("📊 Prometheus metrics available at http://localhost:2112/metrics", nil)
+	if err := http.ListenAndServe(":2112", nil); err != nil {
+		logger.Error("metrics server error", err, nil)
 	}
+}
 
-	// Build middleware chain with DLQ tracking
-	middlewares := []protoflow.MiddlewareRegistration{
+// buildMiddlewares creates the middleware chain with DLQ tracking.
+func buildMiddlewares(dlqMetrics *protoflow.DLQMetrics) []protoflow.MiddlewareRegistration {
+	return []protoflow.MiddlewareRegistration{
 		protoflow.CorrelationIDMiddleware(),
-		dlqTrackingMiddleware(dlqMetrics), // Track messages going to DLQ
+		dlqTrackingMiddleware(dlqMetrics),
 		protoflow.RetryMiddleware(protoflow.RetryMiddlewareConfig{
 			MaxRetries:      2,
 			InitialInterval: 100 * time.Millisecond,
@@ -62,39 +48,42 @@ func main() {
 		protoflow.PoisonQueueMiddleware(nil),
 		protoflow.RecovererMiddleware(),
 	}
+}
 
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := protoflow.NewSlogServiceLogger(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
+	dlqMetrics := protoflow.NewDLQMetrics(prometheus.DefaultRegisterer)
+	if err := dlqMetrics.Register(); err != nil {
+		logger.Error("failed to register DLQ metrics", err, nil)
+	}
+
+	go setupMetricsServer(logger)
+
+	cfg := &protoflow.Config{PubSubSystem: "channel", PoisonQueue: "dlq.poison"}
 	svc := protoflow.NewService(cfg, logger, ctx, protoflow.ServiceDependencies{
 		DisableDefaultMiddlewares: true,
-		Middlewares:               middlewares,
+		Middlewares:               buildMiddlewares(dlqMetrics),
 	})
 
-	// Register a handler that occasionally fails
-	err := protoflow.RegisterMessageHandler(svc, protoflow.MessageHandlerRegistration{
+	if err := protoflow.RegisterMessageHandler(svc, protoflow.MessageHandlerRegistration{
 		Name:         "flaky-processor",
 		ConsumeQueue: "dlq.incoming",
 		Handler:      createFlakyHandler(logger),
-	})
-	if err != nil {
+	}); err != nil {
 		panic(err)
 	}
 
-	// Publish test messages
 	go publishTestMessages(ctx, svc, logger)
-
-	// Periodically print DLQ metrics
 	go printMetricsPeriodically(ctx, dlqMetrics, logger)
-
-	// Run for demonstration
-	go func() {
-		time.Sleep(15 * time.Second)
-		cancel()
-	}()
+	go func() { time.Sleep(15 * time.Second); cancel() }()
 
 	if err := svc.Start(ctx); err != nil && !errors.Is(err, context.Canceled) {
 		logger.Error("service stopped with error", err, nil)
 	}
-
-	// Print final metrics
 	printSnapshot(dlqMetrics, logger)
 }
 

@@ -47,74 +47,62 @@ type DLQMetricsSnapshot struct {
 	CollectedAt   time.Time                   `json:"collected_at"`
 }
 
+// newDLQCounterVec creates a new counter vec with standard protoflow/dlq namespace.
+func newDLQCounterVec(name, help string, labels []string) *prometheus.CounterVec {
+	return prometheus.NewCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "protoflow",
+			Subsystem: "dlq",
+			Name:      name,
+			Help:      help,
+		},
+		labels,
+	)
+}
+
+// newDLQGaugeVec creates a new gauge vec with standard protoflow/dlq namespace.
+func newDLQGaugeVec(name, help string, labels []string) *prometheus.GaugeVec {
+	return prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Namespace: "protoflow",
+			Subsystem: "dlq",
+			Name:      name,
+			Help:      help,
+		},
+		labels,
+	)
+}
+
+// newDLQHistogramVec creates a new histogram vec with standard protoflow/dlq namespace.
+func newDLQHistogramVec(name, help string, buckets []float64, labels []string) *prometheus.HistogramVec {
+	return prometheus.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Namespace: "protoflow",
+			Subsystem: "dlq",
+			Name:      name,
+			Help:      help,
+			Buckets:   buckets,
+		},
+		labels,
+	)
+}
+
 // NewDLQMetrics creates a new DLQ metrics collector.
 func NewDLQMetrics(registerer prometheus.Registerer) *DLQMetrics {
 	if registerer == nil {
 		registerer = prometheus.DefaultRegisterer
 	}
 
-	m := &DLQMetrics{
-		topicCounts: make(map[string]*DLQTopicMetrics),
-		registerer:  registerer,
-		messagesTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: "protoflow",
-				Subsystem: "dlq",
-				Name:      "messages_total",
-				Help:      "Total number of messages sent to the dead letter queue",
-			},
-			[]string{"topic", "handler"},
-		),
-		messagesCurrent: prometheus.NewGaugeVec(
-			prometheus.GaugeOpts{
-				Namespace: "protoflow",
-				Subsystem: "dlq",
-				Name:      "messages_current",
-				Help:      "Current number of messages in the dead letter queue",
-			},
-			[]string{"topic"},
-		),
-		replayedTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: "protoflow",
-				Subsystem: "dlq",
-				Name:      "replayed_total",
-				Help:      "Total number of messages replayed from the dead letter queue",
-			},
-			[]string{"topic"},
-		),
-		purgedTotal: prometheus.NewCounterVec(
-			prometheus.CounterOpts{
-				Namespace: "protoflow",
-				Subsystem: "dlq",
-				Name:      "purged_total",
-				Help:      "Total number of messages purged from the dead letter queue",
-			},
-			[]string{"topic"},
-		),
-		ageSecondsHist: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Namespace: "protoflow",
-				Subsystem: "dlq",
-				Name:      "message_age_seconds",
-				Help:      "Age of messages when moved to DLQ (time since first attempt)",
-				Buckets:   []float64{1, 5, 10, 30, 60, 300, 600, 1800, 3600},
-			},
-			[]string{"topic"},
-		),
-		retryCountHist: prometheus.NewHistogramVec(
-			prometheus.HistogramOpts{
-				Namespace: "protoflow",
-				Subsystem: "dlq",
-				Name:      "retry_count",
-				Help:      "Number of retries before message was moved to DLQ",
-				Buckets:   []float64{1, 2, 3, 5, 10, 20},
-			},
-			[]string{"topic"},
-		),
+	return &DLQMetrics{
+		topicCounts:     make(map[string]*DLQTopicMetrics),
+		registerer:      registerer,
+		messagesTotal:   newDLQCounterVec("messages_total", "Total number of messages sent to the dead letter queue", []string{"topic", "handler"}),
+		messagesCurrent: newDLQGaugeVec("messages_current", "Current number of messages in the dead letter queue", []string{"topic"}),
+		replayedTotal:   newDLQCounterVec("replayed_total", "Total number of messages replayed from the dead letter queue", []string{"topic"}),
+		purgedTotal:     newDLQCounterVec("purged_total", "Total number of messages purged from the dead letter queue", []string{"topic"}),
+		ageSecondsHist:  newDLQHistogramVec("message_age_seconds", "Age of messages when moved to DLQ (time since first attempt)", []float64{1, 5, 10, 30, 60, 300, 600, 1800, 3600}, []string{"topic"}),
+		retryCountHist:  newDLQHistogramVec("retry_count", "Number of retries before message was moved to DLQ", []float64{1, 2, 3, 5, 10, 20}, []string{"topic"}),
 	}
-
-	return m
 }
 
 // Register registers the Prometheus collectors. Safe to call multiple times.

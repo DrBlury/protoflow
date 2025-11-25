@@ -122,11 +122,13 @@ func NewPostgresTransport(cfg PostgresConfig, logger watermill.LoggerAdapter) (*
 
 func (t *PostgresTransport) initSchema() error {
 	// Create schema if it doesn't exist
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	_, err := t.db.Exec(fmt.Sprintf(`CREATE SCHEMA IF NOT EXISTS %s`, t.config.SchemaName))
 	if err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}
 
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	schema := fmt.Sprintf(`
 	CREATE TABLE IF NOT EXISTS %[1]s.messages (
 		id BIGSERIAL PRIMARY KEY,
@@ -181,7 +183,13 @@ func (t *PostgresTransport) Publish(topic string, messages ...*message.Message) 
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	stmt, err := tx.Prepare(fmt.Sprintf(`
 		INSERT INTO %s.messages (uuid, topic, payload, metadata, available_at)
@@ -259,13 +267,16 @@ func (t *PostgresTransport) pollMessages(ctx context.Context, topic string, msgC
 	}
 }
 
-func (t *PostgresTransport) processAvailableMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
+// fetchAndLockMessage attempts to fetch and lock a single message from the queue.
+// Returns the message id, constructed message, and whether a message was found.
+func (t *PostgresTransport) fetchAndLockMessage(ctx context.Context, topic string) (int64, *message.Message, bool) {
 	now := time.Now().UTC()
 	lockUntil := now.Add(t.config.LockTimeout)
 
 	// Use SELECT FOR UPDATE SKIP LOCKED for efficient concurrent message claiming
 	// This is a PostgreSQL-specific feature that allows multiple consumers to
 	// efficiently compete for messages without blocking each other
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		UPDATE %[1]s.messages
 		SET locked_until = $1
@@ -289,41 +300,47 @@ func (t *PostgresTransport) processAvailableMessages(ctx context.Context, topic 
 
 	err := t.db.QueryRowContext(ctx, query, lockUntil, topic, now).Scan(&id, &uuid, &payload, &metadataJSON)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return // No messages available
-		}
-		if t.logger != nil {
+		if err != sql.ErrNoRows && t.logger != nil {
 			t.logger.Error("failed to fetch and lock message", err, nil)
 		}
-		return
+		return 0, nil, false
 	}
 
-	// Parse metadata
 	metadata := make(message.Metadata)
 	if len(metadataJSON) > 0 {
-		if err := json.Unmarshal(metadataJSON, &metadata); err != nil {
-			if t.logger != nil {
-				t.logger.Error("failed to unmarshal metadata", err, nil)
-			}
+		if err := json.Unmarshal(metadataJSON, &metadata); err != nil && t.logger != nil {
+			t.logger.Error("failed to unmarshal metadata", err, nil)
 		}
 	}
 
 	msg := message.NewMessage(uuid, payload)
 	msg.Metadata = metadata
+	return id, msg, true
+}
 
-	// Send message and wait for ack/nack
+// handleMessageResult waits for ack/nack and handles the message accordingly.
+func (t *PostgresTransport) handleMessageResult(ctx context.Context, id int64, topic string, msg *message.Message) {
+	select {
+	case <-msg.Acked():
+		t.ackMessage(ctx, id)
+	case <-msg.Nacked():
+		t.nackMessage(ctx, id, topic)
+	case <-ctx.Done():
+		t.unlockMessage(ctx, id)
+	case <-t.closedChan:
+		t.unlockMessage(ctx, id)
+	}
+}
+
+func (t *PostgresTransport) processAvailableMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
+	id, msg, found := t.fetchAndLockMessage(ctx, topic)
+	if !found {
+		return
+	}
+
 	select {
 	case msgChan <- msg:
-		select {
-		case <-msg.Acked():
-			t.ackMessage(ctx, id)
-		case <-msg.Nacked():
-			t.nackMessage(ctx, id, topic)
-		case <-ctx.Done():
-			t.unlockMessage(ctx, id)
-		case <-t.closedChan:
-			t.unlockMessage(ctx, id)
-		}
+		t.handleMessageResult(ctx, id, topic, msg)
 	case <-ctx.Done():
 		t.unlockMessage(ctx, id)
 	case <-t.closedChan:
@@ -332,6 +349,7 @@ func (t *PostgresTransport) processAvailableMessages(ctx context.Context, topic 
 }
 
 func (t *PostgresTransport) ackMessage(ctx context.Context, id int64) {
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`DELETE FROM %s.messages WHERE id = $1`, t.config.SchemaName)
 	_, err := t.db.ExecContext(ctx, query, id)
 	if err != nil && t.logger != nil {
@@ -342,6 +360,7 @@ func (t *PostgresTransport) ackMessage(ctx context.Context, id int64) {
 func (t *PostgresTransport) nackMessage(ctx context.Context, id int64, topic string) {
 	// Check retry count and potentially move to DLQ
 	var retryCount int
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`SELECT retry_count FROM %s.messages WHERE id = $1`, t.config.SchemaName)
 	err := t.db.QueryRowContext(ctx, query, id).Scan(&retryCount)
 	if err != nil {
@@ -353,6 +372,7 @@ func (t *PostgresTransport) nackMessage(ctx context.Context, id int64, topic str
 
 	if retryCount >= t.config.MaxRetries {
 		// Move to dead letter queue using CTE for atomic operation
+		// #nosec G201 - schema name is validated/sanitized via withDefaults()
 		moveToDLQ := fmt.Sprintf(`
 			WITH moved AS (
 				DELETE FROM %[1]s.messages WHERE id = $1
@@ -370,6 +390,7 @@ func (t *PostgresTransport) nackMessage(ctx context.Context, id int64, topic str
 		// Exponential backoff: 1s, 2s, 4s, 8s...
 		backoffSeconds := 1 << retryCount
 		availableAt := time.Now().UTC().Add(time.Duration(backoffSeconds) * time.Second)
+		// #nosec G201 - schema name is validated/sanitized via withDefaults()
 		query := fmt.Sprintf(`
 			UPDATE %s.messages
 			SET retry_count = retry_count + 1,
@@ -385,6 +406,7 @@ func (t *PostgresTransport) nackMessage(ctx context.Context, id int64, topic str
 }
 
 func (t *PostgresTransport) unlockMessage(ctx context.Context, id int64) {
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`UPDATE %s.messages SET locked_until = NULL WHERE id = $1`, t.config.SchemaName)
 	_, err := t.db.ExecContext(ctx, query, id)
 	if err != nil && t.logger != nil {
@@ -420,6 +442,7 @@ func (t *PostgresTransport) GetDB() *sql.DB {
 // GetPendingCount returns the number of pending messages for a topic.
 func (t *PostgresTransport) GetPendingCount(topic string) (int64, error) {
 	var count int64
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		SELECT COUNT(*) FROM %s.messages
 		WHERE topic = $1 AND status = 'pending'
@@ -431,6 +454,7 @@ func (t *PostgresTransport) GetPendingCount(topic string) (int64, error) {
 // GetDLQCount returns the number of messages in the dead letter queue for a topic.
 func (t *PostgresTransport) GetDLQCount(topic string) (int64, error) {
 	var count int64
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		SELECT COUNT(*) FROM %s.dead_letter_queue
 		WHERE original_topic = $1
@@ -445,9 +469,16 @@ func (t *PostgresTransport) ReplayDLQMessage(dlqID int64) error {
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	// Use CTE for atomic replay
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		WITH replayed AS (
 			DELETE FROM %[1]s.dead_letter_queue WHERE id = $1
@@ -477,9 +508,16 @@ func (t *PostgresTransport) ReplayAllDLQ(topic string) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	defer tx.Rollback()
+	defer func() {
+		if err := tx.Rollback(); err != nil && err != sql.ErrTxDone {
+			if t.logger != nil {
+				t.logger.Error("failed to rollback transaction", err, nil)
+			}
+		}
+	}()
 
 	// Use CTE for atomic batch replay
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		WITH replayed AS (
 			DELETE FROM %[1]s.dead_letter_queue WHERE original_topic = $1
@@ -501,6 +539,7 @@ func (t *PostgresTransport) ReplayAllDLQ(topic string) (int64, error) {
 
 // PurgeDLQ removes all messages from the dead letter queue for a topic.
 func (t *PostgresTransport) PurgeDLQ(topic string) (int64, error) {
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`DELETE FROM %s.dead_letter_queue WHERE original_topic = $1`, t.config.SchemaName)
 	result, err := t.db.Exec(query, topic)
 	if err != nil {
@@ -511,6 +550,7 @@ func (t *PostgresTransport) PurgeDLQ(topic string) (int64, error) {
 
 // ListDLQMessages returns messages from the dead letter queue with pagination.
 func (t *PostgresTransport) ListDLQMessages(topic string, limit, offset int) ([]PostgresDLQMessage, error) {
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		SELECT id, uuid, original_topic, payload, metadata, error_message, failed_at, retry_count
 		FROM %s.dead_letter_queue
@@ -533,7 +573,11 @@ func (t *PostgresTransport) ListDLQMessages(topic string, limit, offset int) ([]
 			return nil, err
 		}
 		if len(metadataJSON) > 0 {
-			json.Unmarshal(metadataJSON, &msg.Metadata)
+			if err := json.Unmarshal(metadataJSON, &msg.Metadata); err != nil {
+				if t.logger != nil {
+					t.logger.Error("failed to unmarshal metadata", err, nil)
+				}
+			}
 		}
 		messages = append(messages, msg)
 	}
@@ -555,6 +599,7 @@ type PostgresDLQMessage struct {
 // CleanupExpiredLocks unlocks messages that have been locked longer than the lock timeout.
 // This can be run periodically to recover from crashed consumers.
 func (t *PostgresTransport) CleanupExpiredLocks() (int64, error) {
+	// #nosec G201 - schema name is validated/sanitized via withDefaults()
 	query := fmt.Sprintf(`
 		UPDATE %s.messages
 		SET locked_until = NULL

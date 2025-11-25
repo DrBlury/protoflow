@@ -99,6 +99,58 @@ type ioSubscriber struct {
 	logger   watermill.LoggerAdapter
 }
 
+// handleEOF handles end-of-file condition by waiting and seeking back to last position.
+// Returns true if the goroutine should continue, false if it should exit.
+func (s *ioSubscriber) handleEOF(f *os.File, reader *bufio.Reader, lastPos *int64) bool {
+	currentPos, _ := f.Seek(0, io.SeekCurrent)
+	currentPos -= int64(reader.Buffered())
+
+	if currentPos > *lastPos {
+		*lastPos = currentPos
+	}
+
+	time.Sleep(50 * time.Millisecond)
+
+	if _, err := f.Seek(*lastPos, io.SeekStart); err != nil {
+		s.logger.Error("Failed to seek file", err, nil)
+		return false
+	}
+	reader.Reset(f)
+	return true
+}
+
+// processMessage parses and sends a message if it matches the topic.
+// Returns true if processing should continue.
+func (s *ioSubscriber) processMessage(ctx context.Context, out chan<- *message.Message, line []byte, topic string) bool {
+	var sm storedMessage
+	if err := json.Unmarshal(line, &sm); err != nil {
+		s.logger.Error("Failed to unmarshal message", err, nil)
+		return true // continue processing
+	}
+
+	if sm.Topic != topic {
+		return true // continue processing
+	}
+
+	msg := message.NewMessage(sm.UUID, sm.Payload)
+	msg.Metadata = sm.Metadata
+
+	select {
+	case out <- msg:
+		select {
+		case <-msg.Acked():
+			// good
+		case <-msg.Nacked():
+			s.logger.Debug("Message nacked", watermill.LogFields{"uuid": msg.UUID})
+		case <-ctx.Done():
+			return false
+		}
+	case <-ctx.Done():
+		return false
+	}
+	return true
+}
+
 func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	out := make(chan *message.Message)
 
@@ -112,9 +164,7 @@ func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *mes
 		}
 		defer f.Close()
 
-		// Track our position so we can continue reading new content
 		var lastPos int64
-
 		reader := bufio.NewReader(f)
 
 		for {
@@ -125,21 +175,9 @@ func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *mes
 				line, err := reader.ReadBytes('\n')
 				if err != nil {
 					if err == io.EOF {
-						// Get current position and check if file has grown
-						currentPos, _ := f.Seek(0, io.SeekCurrent)
-						// Subtract any buffered but unread data
-						currentPos -= int64(reader.Buffered())
-
-						if currentPos > lastPos {
-							lastPos = currentPos
+						if !s.handleEOF(f, reader, &lastPos) {
+							return
 						}
-
-						// Wait and then check for new content
-						time.Sleep(50 * time.Millisecond)
-
-						// Seek to our last known position and reset reader
-						f.Seek(lastPos, io.SeekStart)
-						reader.Reset(f)
 						continue
 					}
 					s.logger.Error("Failed to read file", err, nil)
@@ -150,30 +188,7 @@ func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *mes
 				currentPos, _ := f.Seek(0, io.SeekCurrent)
 				lastPos = currentPos - int64(reader.Buffered())
 
-				var sm storedMessage
-				if err := json.Unmarshal(line, &sm); err != nil {
-					s.logger.Error("Failed to unmarshal message", err, nil)
-					continue
-				}
-
-				if sm.Topic != topic {
-					continue
-				}
-
-				msg := message.NewMessage(sm.UUID, sm.Payload)
-				msg.Metadata = sm.Metadata
-
-				select {
-				case out <- msg:
-					select {
-					case <-msg.Acked():
-						// good
-					case <-msg.Nacked():
-						s.logger.Debug("Message nacked", watermill.LogFields{"uuid": msg.UUID})
-					case <-ctx.Done():
-						return
-					}
-				case <-ctx.Done():
+				if !s.processMessage(ctx, out, line, topic) {
 					return
 				}
 			}
