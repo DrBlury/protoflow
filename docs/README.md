@@ -28,6 +28,7 @@ Welcome to the Protoflow documentation. This is where you'll find detailed guide
 ## 📦 What's Included
 
 ### Transports
+
 - **Go Channels**: In-memory transport for testing
 - **Kafka**: High-throughput streaming with consumer groups
 - **RabbitMQ**: AMQP-based durable queues
@@ -38,6 +39,7 @@ Welcome to the Protoflow documentation. This is where you'll find detailed guide
 - **SQLite**: Embedded persistent queue with delayed messages and DLQ management
 
 ### Middleware Stack
+
 - Correlation ID injection
 - Structured message logging
 - Protobuf validation
@@ -50,6 +52,7 @@ Welcome to the Protoflow documentation. This is where you'll find detailed guide
 - **Job lifecycle hooks** (OnJobStart, OnJobDone, OnJobError)
 
 ### Core APIs
+
 - `NewService` / `TryNewService`: Service creation
 - `RegisterProtoHandler`: Type-safe protobuf handlers
 - `RegisterJSONHandler`: Type-safe JSON handlers

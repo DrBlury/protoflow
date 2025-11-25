@@ -5,6 +5,7 @@ This document outlines the future direction and planned features for the Protofl
 ## ✅ Implemented Features
 
 ### Transports
+
 - [x] **Go Channels**: In-memory transport for testing and local development
 - [x] **Kafka**: Full pub/sub support with consumer groups
 - [x] **RabbitMQ**: AMQP-based messaging with durable queues
@@ -159,6 +160,7 @@ The following examples are available in the `examples/` directory:
 | `dlq_metrics/` | DLQ metrics collection with Prometheus |
 
 Documentation guides:
+
 - [Transport Comparison Guide](docs/transports/README.md) - Feature matrix for all transports
 - [Configuration Guide](docs/configuration/README.md) - Transport and middleware configuration
 - [Handlers Guide](docs/handlers/README.md) - Type-safe handler patterns

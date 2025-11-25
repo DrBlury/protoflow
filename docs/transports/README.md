@@ -24,10 +24,11 @@ This guide provides a comprehensive comparison of all supported transport backen
 | **SKIP LOCKED Support** | N/A | N/A | N/A | N/A | N/A | N/A | N/A | ❌ | ✅ |
 
 **Legend:**
+
 - ✅ Fully supported
 - ⚪ Possible with managed services
 - ❌ Not supported
-- * NATS requires JetStream for persistence
+- NATS requires JetStream for persistence
 - ** SQS delay queues only support up to 15 minutes via visibility timeout
 - *** Kafka maintains order within partitions only
 - **** PostgreSQL supports concurrent consumers via SKIP LOCKED
@@ -46,11 +47,13 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Zero external dependencies
 - Fastest possible throughput
 - Simplest setup
 
 **Cons:**
+
 - No persistence (messages lost on restart)
 - Single process only
 - No consumer groups
@@ -70,18 +73,22 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Extremely high throughput (millions of messages/sec)
 - Strong ordering guarantees within partitions
 - Built-in replication and fault tolerance
 - Message retention for replay
 
 **Cons:**
+
 - Complex operational overhead
 - No native delayed message support
 - Ordering only guaranteed within a partition
 
 **Delayed Messages Workaround:**
+
 Kafka doesn't support delayed messages natively. Alternatives:
+
 1. Use a separate "delay" topic with a consumer that waits
 2. Use Kafka Streams with a state store for scheduling
 3. Combine with a scheduler service
@@ -100,17 +107,20 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Mature, battle-tested broker
 - Native delayed messages (via plugin or dead-letter exchange)
 - Flexible routing patterns
 - Message prioritization
 
 **Cons:**
+
 - Lower throughput than Kafka
 - More complex to scale horizontally
 - Plugin required for delayed messages
 
 **Delayed Messages:**
+
 ```go
 // Set TTL and dead-letter exchange for delayed processing
 msg.Metadata.Set("x-delay", "60000") // 60 seconds (requires rabbitmq_delayed_message_exchange plugin)
@@ -131,19 +141,23 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Fully managed, no operational overhead
 - Automatic scaling
 - Pay-per-use pricing
 - Native AWS integration
 
 **Cons:**
+
 - Limited delay support (max 15 minutes visibility timeout)
 - No strict ordering (FIFO queues have limitations)
 - Higher latency than dedicated brokers
 - AWS lock-in
 
 **Delayed Messages:**
+
 SQS doesn't support true delayed messages, but you can use:
+
 1. Visibility timeout (up to 12 hours, but affects retries)
 2. Message timers in SQS (up to 15 minutes)
 3. Step Functions for longer delays
@@ -162,12 +176,14 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Extremely low latency
 - Simple deployment
 - Request-reply pattern support
 - Lightweight resource usage
 
 **Cons:**
+
 - No delayed messages
 - Requires JetStream for persistence
 - Simpler feature set than Kafka/RabbitMQ
@@ -187,11 +203,13 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Universal compatibility
 - Easy debugging with standard HTTP tools
 - Works through firewalls
 
 **Cons:**
+
 - No persistence
 - Synchronous processing only
 - No consumer groups or scaling
@@ -210,11 +228,13 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - Simple file-based persistence
 - Easy to inspect messages
 - No external dependencies
 
 **Cons:**
+
 - Single consumer only
 - No delayed messages
 - Limited scalability
@@ -233,6 +253,7 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - ✅ **Native delayed message support** - Schedule jobs for future processing
 - Persistent, ACID-compliant storage
 - Built-in DLQ with inspection and replay
@@ -241,11 +262,13 @@ cfg := &protoflow.Config{
 - Transactional message handling
 
 **Cons:**
+
 - Single-node only (no clustering)
 - Lower throughput than dedicated message brokers
 - Not suitable for high-volume distributed systems
 
 **Delayed Messages:**
+
 ```go
 msg := message.NewMessage(protoflow.CreateULID(), payload)
 msg.Metadata.Set("protoflow_delay", "30s")  // Process after 30 seconds
@@ -254,7 +277,9 @@ msg.Metadata.Set("protoflow_delay", "1h")   // Process after 1 hour
 ```
 
 **DLQ Management:**
+
 SQLite transport provides programmatic DLQ access:
+
 - `ListDLQMessages(topic, limit, offset)` - Browse failed messages
 - `ReplayDLQMessage(dlqID)` - Retry a single message
 - `ReplayAllDLQ(topic)` - Retry all messages for a topic
@@ -276,6 +301,7 @@ cfg := &protoflow.Config{
 ```
 
 **Pros:**
+
 - ✅ **Native delayed message support** - Schedule jobs for future processing
 - ✅ **SKIP LOCKED** - Efficient concurrent consumer support without blocking
 - Production-ready ACID compliance
@@ -286,11 +312,13 @@ cfg := &protoflow.Config{
 - Works with existing PostgreSQL infrastructure
 
 **Cons:**
+
 - Requires PostgreSQL server
 - Higher latency than dedicated message brokers
 - Polling-based (configurable poll interval)
 
 **Delayed Messages:**
+
 ```go
 msg := message.NewMessage(protoflow.CreateULID(), payload)
 msg.Metadata.Set("protoflow_delay", "30s")  // Process after 30 seconds
@@ -299,7 +327,9 @@ msg.Metadata.Set("protoflow_delay", "1h")   // Process after 1 hour
 ```
 
 **DLQ Management:**
+
 PostgreSQL transport provides the same DLQ API as SQLite:
+
 - `ListDLQMessages(topic, limit, offset)` - Browse failed messages
 - `ReplayDLQMessage(dlqID)` - Retry a single message
 - `ReplayAllDLQ(topic)` - Retry all messages for a topic
@@ -308,6 +338,7 @@ PostgreSQL transport provides the same DLQ API as SQLite:
 - `GetPendingCount(topic)` - Get pending message count
 
 **Maintenance Operations:**
+
 ```go
 // Cleanup expired locks (for crashed consumers)
 transport.CleanupExpiredLocks()
@@ -321,7 +352,9 @@ transport.VacuumTables()
 ## Use Case Recommendations
 
 ### Testing & Development
+
 **Recommended:** Channel or SQLite (in-memory)
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "channel",  // Or "sqlite" with SQLiteFile: ":memory:"
@@ -329,7 +362,9 @@ cfg := &protoflow.Config{
 ```
 
 ### Single-Node Production with Delayed Jobs
+
 **Recommended:** SQLite
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "sqlite",
@@ -338,7 +373,9 @@ cfg := &protoflow.Config{
 ```
 
 ### High-Throughput Event Streaming
+
 **Recommended:** Kafka
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem:       "kafka",
@@ -348,7 +385,9 @@ cfg := &protoflow.Config{
 ```
 
 ### Enterprise Integration with Complex Routing
+
 **Recommended:** RabbitMQ
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "rabbitmq",
@@ -357,7 +396,9 @@ cfg := &protoflow.Config{
 ```
 
 ### AWS Cloud-Native Applications
+
 **Recommended:** AWS SQS
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "aws",
@@ -367,7 +408,9 @@ cfg := &protoflow.Config{
 ```
 
 ### Low-Latency Microservices
+
 **Recommended:** NATS
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "nats",
@@ -376,7 +419,9 @@ cfg := &protoflow.Config{
 ```
 
 ### Edge/Embedded Systems
+
 **Recommended:** SQLite
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "sqlite",
@@ -385,7 +430,9 @@ cfg := &protoflow.Config{
 ```
 
 ### Production with Existing PostgreSQL Infrastructure
+
 **Recommended:** PostgreSQL
+
 ```go
 cfg := &protoflow.Config{
     PubSubSystem: "postgres",
