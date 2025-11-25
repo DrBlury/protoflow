@@ -43,7 +43,6 @@ func TestConfigStringRedactsURLCredentials(t *testing.T) {
 	if strings.Contains(str, "nats-secret") {
 		t.Error("Config.String() should redact NATS password")
 	}
-	// Should still contain username
 	if !strings.Contains(str, "user") {
 		t.Error("Config.String() should preserve username in RabbitMQ URL")
 	}
@@ -52,133 +51,153 @@ func TestConfigStringRedactsURLCredentials(t *testing.T) {
 	}
 }
 
-func TestConfigValidate(t *testing.T) {
+// Transport validation tests
+func TestConfigValidate_ChannelTransport(t *testing.T) {
 	tests := []struct {
-		name      string
-		config    Config
-		wantError bool
-		errorMsg  string
+		name   string
+		config Config
 	}{
-		{
-			name:      "empty config is valid (channel transport)",
-			config:    Config{},
-			wantError: false,
-		},
-		{
-			name:      "channel transport valid",
-			config:    Config{PubSubSystem: "channel"},
-			wantError: false,
-		},
-		{
-			name:      "kafka missing brokers",
-			config:    Config{PubSubSystem: "kafka"},
-			wantError: true,
-			errorMsg:  "kafka: brokers are required",
-		},
-		{
-			name: "kafka valid",
-			config: Config{
-				PubSubSystem: "kafka",
-				KafkaBrokers: []string{"localhost:9092"},
-			},
-			wantError: false,
-		},
-		{
-			name:      "rabbitmq missing url",
-			config:    Config{PubSubSystem: "rabbitmq"},
-			wantError: true,
-			errorMsg:  "rabbitmq: URL is required",
-		},
-		{
-			name: "rabbitmq valid",
-			config: Config{
-				PubSubSystem: "rabbitmq",
-				RabbitMQURL:  "amqp://localhost:5672",
-			},
-			wantError: false,
-		},
-		{
-			name:      "nats missing url",
-			config:    Config{PubSubSystem: "nats"},
-			wantError: true,
-			errorMsg:  "nats: URL is required",
-		},
-		{
-			name: "nats valid",
-			config: Config{
-				PubSubSystem: "nats",
-				NATSURL:      "nats://localhost:4222",
-			},
-			wantError: false,
-		},
-		{
-			name:      "aws missing region",
-			config:    Config{PubSubSystem: "aws"},
-			wantError: true,
-			errorMsg:  "aws: region is required",
-		},
-		{
-			name: "aws valid",
-			config: Config{
-				PubSubSystem: "aws",
-				AWSRegion:    "us-east-1",
-			},
-			wantError: false,
-		},
-		{
-			name:      "custom transport is allowed",
-			config:    Config{PubSubSystem: "custom"},
-			wantError: false,
-		},
-		{
-			name:      "negative max retries invalid",
-			config:    Config{RetryMaxRetries: -1},
-			wantError: true,
-			errorMsg:  "retry: max retries cannot be negative",
-		},
-		{
-			name:      "negative initial interval invalid",
-			config:    Config{RetryInitialInterval: -1 * time.Second},
-			wantError: true,
-			errorMsg:  "retry: initial interval cannot be negative",
-		},
-		{
-			name: "initial interval exceeds max invalid",
-			config: Config{
-				RetryInitialInterval: 10 * time.Second,
-				RetryMaxInterval:     5 * time.Second,
-			},
-			wantError: true,
-			errorMsg:  "retry: initial interval cannot exceed max interval",
-		},
-		{
-			name:      "invalid metrics port",
-			config:    Config{MetricsPort: 70000},
-			wantError: true,
-			errorMsg:  "metrics: invalid port",
-		},
-		{
-			name:      "invalid webui port",
-			config:    Config{WebUIPort: -1},
-			wantError: true,
-			errorMsg:  "webui: invalid port",
-		},
+		{"empty config defaults to channel", Config{}},
+		{"explicit channel", Config{PubSubSystem: "channel"}},
+		{"gochannel alias", Config{PubSubSystem: "gochannel"}},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.config.Validate()
-			if tt.wantError {
-				if err == nil {
-					t.Errorf("expected error containing %q, got nil", tt.errorMsg)
-				} else if !strings.Contains(err.Error(), tt.errorMsg) {
-					t.Errorf("expected error containing %q, got %q", tt.errorMsg, err.Error())
-				}
-			} else if err != nil {
+			if err := tt.config.Validate(); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 		})
 	}
+}
+
+func TestConfigValidate_KafkaTransport(t *testing.T) {
+	t.Run("missing brokers", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "kafka"}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "kafka: brokers are required")
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "kafka", KafkaBrokers: []string{"localhost:9092"}}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestConfigValidate_RabbitMQTransport(t *testing.T) {
+	t.Run("missing url", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "rabbitmq"}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "rabbitmq: URL is required")
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "rabbitmq", RabbitMQURL: "amqp://localhost:5672"}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestConfigValidate_NATSTransport(t *testing.T) {
+	t.Run("missing url", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "nats"}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "nats: URL is required")
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "nats", NATSURL: "nats://localhost:4222"}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestConfigValidate_AWSTransport(t *testing.T) {
+	t.Run("missing region", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "aws"}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "aws: region is required")
+	})
+
+	t.Run("valid", func(t *testing.T) {
+		cfg := Config{PubSubSystem: "aws", AWSRegion: "us-east-1"}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestConfigValidate_CustomTransport(t *testing.T) {
+	cfg := Config{PubSubSystem: "custom-transport"}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("custom transport should be allowed: %v", err)
+	}
+}
+
+// Retry configuration tests
+func TestConfigValidate_RetryConfig(t *testing.T) {
+	t.Run("negative max retries", func(t *testing.T) {
+		cfg := Config{RetryMaxRetries: -1}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "retry: max retries cannot be negative")
+	})
+
+	t.Run("negative initial interval", func(t *testing.T) {
+		cfg := Config{RetryInitialInterval: -1 * time.Second}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "retry: initial interval cannot be negative")
+	})
+
+	t.Run("negative max interval", func(t *testing.T) {
+		cfg := Config{RetryMaxInterval: -1 * time.Second}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "retry: max interval cannot be negative")
+	})
+
+	t.Run("initial exceeds max", func(t *testing.T) {
+		cfg := Config{
+			RetryInitialInterval: 10 * time.Second,
+			RetryMaxInterval:     5 * time.Second,
+		}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "retry: initial interval cannot exceed max interval")
+	})
+
+	t.Run("valid retry config", func(t *testing.T) {
+		cfg := Config{
+			RetryMaxRetries:      5,
+			RetryInitialInterval: 1 * time.Second,
+			RetryMaxInterval:     30 * time.Second,
+		}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+// Port configuration tests
+func TestConfigValidate_Ports(t *testing.T) {
+	t.Run("invalid metrics port high", func(t *testing.T) {
+		cfg := Config{MetricsPort: 70000}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "metrics: invalid port")
+	})
+
+	t.Run("invalid webui port negative", func(t *testing.T) {
+		cfg := Config{WebUIPort: -1}
+		err := cfg.Validate()
+		assertErrorContains(t, err, "webui: invalid port")
+	})
+
+	t.Run("valid ports", func(t *testing.T) {
+		cfg := Config{MetricsPort: 9090, WebUIPort: 8081}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestValidateConfigNil(t *testing.T) {
@@ -231,5 +250,17 @@ func TestRedactURLCredentials(t *testing.T) {
 				t.Errorf("expected result to NOT contain %q, got %q", tt.shouldNotContain, result)
 			}
 		})
+	}
+}
+
+// assertErrorContains is a test helper that checks if an error contains a substring.
+func assertErrorContains(t *testing.T, err error, want string) {
+	t.Helper()
+	if err == nil {
+		t.Errorf("expected error containing %q, got nil", want)
+		return
+	}
+	if !strings.Contains(err.Error(), want) {
+		t.Errorf("expected error containing %q, got %q", want, err.Error())
 	}
 }

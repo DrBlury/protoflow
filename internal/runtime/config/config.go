@@ -108,34 +108,40 @@ func redactURLCredentials(rawURL string) string {
 func (c *Config) Validate() error {
 	var errs []error
 
+	errs = append(errs, c.validateTransport()...)
+	errs = append(errs, c.validateRetry()...)
+	errs = append(errs, c.validatePorts()...)
+
+	return errors.Join(errs...)
+}
+
+// validateTransport checks transport-specific required fields.
+func (c *Config) validateTransport() []error {
 	switch strings.ToLower(c.PubSubSystem) {
 	case "kafka":
 		if len(c.KafkaBrokers) == 0 {
-			errs = append(errs, errors.New("kafka: brokers are required"))
+			return []error{errors.New("kafka: brokers are required")}
 		}
 	case "rabbitmq":
 		if c.RabbitMQURL == "" {
-			errs = append(errs, errors.New("rabbitmq: URL is required"))
+			return []error{errors.New("rabbitmq: URL is required")}
 		}
 	case "nats":
 		if c.NATSURL == "" {
-			errs = append(errs, errors.New("nats: URL is required"))
+			return []error{errors.New("nats: URL is required")}
 		}
 	case "aws":
 		if c.AWSRegion == "" {
-			errs = append(errs, errors.New("aws: region is required"))
+			return []error{errors.New("aws: region is required")}
 		}
-	case "http":
-		// HTTP transport can work with defaults
-	case "io":
-		// IO transport uses default file path if not specified
-	case "channel", "gochannel", "":
-		// In-memory channel transport has no required config
-	default:
-		// Allow unknown pubsub systems for custom transport factories
 	}
+	// http, io, channel, gochannel, "", and custom transports have no required config
+	return nil
+}
 
-	// Validate retry configuration
+// validateRetry checks retry configuration values.
+func (c *Config) validateRetry() []error {
+	var errs []error
 	if c.RetryMaxRetries < 0 {
 		errs = append(errs, errors.New("retry: max retries cannot be negative"))
 	}
@@ -148,16 +154,19 @@ func (c *Config) Validate() error {
 	if c.RetryMaxInterval > 0 && c.RetryInitialInterval > 0 && c.RetryInitialInterval > c.RetryMaxInterval {
 		errs = append(errs, errors.New("retry: initial interval cannot exceed max interval"))
 	}
+	return errs
+}
 
-	// Validate port ranges
+// validatePorts checks port configuration values.
+func (c *Config) validatePorts() []error {
+	var errs []error
 	if c.MetricsPort < 0 || c.MetricsPort > 65535 {
 		errs = append(errs, fmt.Errorf("metrics: invalid port %d", c.MetricsPort))
 	}
 	if c.WebUIPort < 0 || c.WebUIPort > 65535 {
 		errs = append(errs, fmt.Errorf("webui: invalid port %d", c.WebUIPort))
 	}
-
-	return errors.Join(errs...)
+	return errs
 }
 
 // ValidateConfig is a convenience function to validate a config pointer.
