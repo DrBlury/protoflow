@@ -149,7 +149,7 @@ func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *mes
 					case <-msg.Acked():
 						// good
 					case <-msg.Nacked():
-						s.logger.Info("Message nacked", watermill.LogFields{"uuid": msg.UUID})
+						s.logger.Debug("Message nacked", watermill.LogFields{"uuid": msg.UUID})
 					case <-ctx.Done():
 						return
 					}

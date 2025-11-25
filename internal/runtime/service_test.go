@@ -514,3 +514,42 @@ func TestNewService_DisableDefaultMiddlewares(t *testing.T) {
 		TransportFactory:          &mockTransportFactory{},
 	})
 }
+
+func TestService_Stop(t *testing.T) {
+	svc := NewService(&configpkg.Config{}, newTestLogger(), context.Background(), ServiceDependencies{
+		DisableDefaultMiddlewares: true,
+		TransportFactory:          &mockTransportFactory{},
+	})
+
+	// Set up httpCancel to avoid nil pointer
+	ctx, cancel := context.WithCancel(context.Background())
+	svc.httpCtx = ctx
+	svc.httpCancel = cancel
+
+	// Call Stop - should not panic
+	svc.Stop()
+
+	// Verify context was cancelled
+	select {
+	case <-svc.httpCtx.Done():
+		// expected
+	default:
+		t.Fatal("expected httpCtx to be cancelled after Stop()")
+	}
+}
+
+func TestService_StopWithNilCancel(t *testing.T) {
+	svc := &Service{}
+
+	// Should not panic when httpCancel is nil
+	svc.Stop()
+}
+
+func TestGetErrorClassifier_NilClassifier(t *testing.T) {
+	svc := &Service{errorClassifier: nil}
+	classifier := svc.getErrorClassifier()
+
+	if classifier == nil {
+		t.Fatal("expected default classifier when nil")
+	}
+}

@@ -25,14 +25,8 @@ type JSONHandlerRegistration[T any, O any] struct {
 
 // JSONMessageContext exposes the incoming payload and metadata for JSON handlers.
 type JSONMessageContext[T any] struct {
-	Payload  T
-	Metadata metadatapkg.Metadata
-	Logger   loggingpkg.ServiceLogger
-}
-
-// CloneMetadata copies the current metadata map so handlers can mutate headers safely.
-func (c JSONMessageContext[T]) CloneMetadata() metadatapkg.Metadata {
-	return c.Metadata.Clone()
+	MessageContextBase
+	Payload T
 }
 
 // JSONMessageOutput represents an event emitted by a JSON handler.
@@ -63,9 +57,11 @@ func BuildJSONHandler[T any, O any](handler JSONMessageHandler[T, O], logger log
 		}
 
 		ctx := JSONMessageContext[T]{
-			Payload:  typed,
-			Metadata: metadatapkg.FromWatermill(msg.Metadata),
-			Logger:   logger,
+			MessageContextBase: MessageContextBase{
+				Metadata: metadatapkg.FromWatermill(msg.Metadata),
+				Logger:   logger,
+			},
+			Payload: typed,
 		}
 
 		outgoing, err := handler(msg.Context(), ctx)

@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	errspkg "github.com/drblury/protoflow/internal/runtime/errors"
+	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
 	idspkg "github.com/drblury/protoflow/internal/runtime/ids"
 	metadatapkg "github.com/drblury/protoflow/internal/runtime/metadata"
 )
@@ -27,7 +28,7 @@ type Producer interface {
 // the standard metadata required by the event pipeline.
 func NewMessageFromProto(event proto.Message, metadata metadatapkg.Metadata) (*message.Message, error) {
 	if event == nil {
-		return nil, errors.New("event payload is required")
+		return nil, errspkg.ErrEventPayloadRequired
 	}
 
 	payload, err := protoJSONMarshalOptions.Marshal(event)
@@ -37,7 +38,7 @@ func NewMessageFromProto(event proto.Message, metadata metadatapkg.Metadata) (*m
 
 	msg := message.NewMessage(idspkg.CreateULID(), payload)
 	msg.Metadata = metadatapkg.ToWatermill(metadata)
-	msg.Metadata["event_message_schema"] = fmt.Sprintf("%T", event)
+	msg.Metadata[handlerpkg.MetadataKeyEventSchema] = fmt.Sprintf("%T", event)
 	return msg, nil
 }
 

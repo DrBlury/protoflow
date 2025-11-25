@@ -12,12 +12,11 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+
+	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
 )
 
 const (
-	metadataKeyQueueDepth = "protoflow_queue_depth"
-	metadataKeyEnqueuedAt = "protoflow_enqueued_at"
-
 	latencySampleSize    = 256
 	throughputWindowSize = time.Minute
 )
@@ -266,8 +265,8 @@ func extractBacklogHints(msg *message.Message) (int64, int64) {
 	if msg == nil {
 		return -1, -1
 	}
-	depth := parseInt64Metadata(msg.Metadata, metadataKeyQueueDepth)
-	lag := parseLagMetadata(msg.Metadata, metadataKeyEnqueuedAt)
+	depth := parseInt64Metadata(msg.Metadata, handlerpkg.MetadataKeyQueueDepth)
+	lag := parseLagMetadata(msg.Metadata, handlerpkg.MetadataKeyEnqueuedAt)
 	return depth, lag
 }
 

@@ -1,7 +1,10 @@
 package config
 
 import (
+	"errors"
 	"fmt"
+	"net/url"
+	"strings"
 	"time"
 )
 
@@ -58,6 +61,9 @@ type Config struct {
 	WebUIEnabled bool
 	// WebUIPort is the port where the WebUI API will be exposed. Defaults to 8081.
 	WebUIPort int
+	// WebUICORSAllowedOrigins specifies allowed origins for CORS. Use "*" for development
+	// or specific origins like "https://example.com" for production. Empty disables CORS headers.
+	WebUICORSAllowedOrigins []string
 }
 
 func (c Config) String() string {
@@ -69,7 +75,96 @@ func (c Config) String() string {
 	if copy.AWSAccessKeyID != "" {
 		copy.AWSAccessKeyID = "***REDACTED***"
 	}
+	// Redact credentials that may be embedded in connection URLs
+	if copy.RabbitMQURL != "" {
+		copy.RabbitMQURL = redactURLCredentials(copy.RabbitMQURL)
+	}
+	if copy.NATSURL != "" {
+		copy.NATSURL = redactURLCredentials(copy.NATSURL)
+	}
 	// Use a type alias to avoid infinite recursion when printing
 	type configAlias Config
 	return fmt.Sprintf("%+v", configAlias(copy))
+}
+
+// redactURLCredentials masks password in URLs like amqp://user:pass@host
+func redactURLCredentials(rawURL string) string {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		// If parsing fails, redact the whole thing to be safe
+		return "***REDACTED_URL***"
+	}
+	if parsed.User != nil {
+		if _, hasPassword := parsed.User.Password(); hasPassword {
+			parsed.User = url.UserPassword(parsed.User.Username(), "***REDACTED***")
+		}
+	}
+	return parsed.String()
+}
+
+// Validate checks that the configuration has all required fields for the selected transport.
+// Returns an error describing any missing or invalid configuration.
+// Note: validation of pubsub system values is lenient to allow custom transport factories.
+func (c *Config) Validate() error {
+	var errs []error
+
+	switch strings.ToLower(c.PubSubSystem) {
+	case "kafka":
+		if len(c.KafkaBrokers) == 0 {
+			errs = append(errs, errors.New("kafka: brokers are required"))
+		}
+	case "rabbitmq":
+		if c.RabbitMQURL == "" {
+			errs = append(errs, errors.New("rabbitmq: URL is required"))
+		}
+	case "nats":
+		if c.NATSURL == "" {
+			errs = append(errs, errors.New("nats: URL is required"))
+		}
+	case "aws":
+		if c.AWSRegion == "" {
+			errs = append(errs, errors.New("aws: region is required"))
+		}
+	case "http":
+		// HTTP transport can work with defaults
+	case "io":
+		// IO transport uses default file path if not specified
+	case "channel", "gochannel", "":
+		// In-memory channel transport has no required config
+	default:
+		// Allow unknown pubsub systems for custom transport factories
+	}
+
+	// Validate retry configuration
+	if c.RetryMaxRetries < 0 {
+		errs = append(errs, errors.New("retry: max retries cannot be negative"))
+	}
+	if c.RetryInitialInterval < 0 {
+		errs = append(errs, errors.New("retry: initial interval cannot be negative"))
+	}
+	if c.RetryMaxInterval < 0 {
+		errs = append(errs, errors.New("retry: max interval cannot be negative"))
+	}
+	if c.RetryMaxInterval > 0 && c.RetryInitialInterval > 0 && c.RetryInitialInterval > c.RetryMaxInterval {
+		errs = append(errs, errors.New("retry: initial interval cannot exceed max interval"))
+	}
+
+	// Validate port ranges
+	if c.MetricsPort < 0 || c.MetricsPort > 65535 {
+		errs = append(errs, fmt.Errorf("metrics: invalid port %d", c.MetricsPort))
+	}
+	if c.WebUIPort < 0 || c.WebUIPort > 65535 {
+		errs = append(errs, fmt.Errorf("webui: invalid port %d", c.WebUIPort))
+	}
+
+	return errors.Join(errs...)
+}
+
+// ValidateConfig is a convenience function to validate a config pointer.
+// Returns nil if the config is valid.
+func ValidateConfig(c *Config) error {
+	if c == nil {
+		return errors.New("config is nil")
+	}
+	return c.Validate()
 }

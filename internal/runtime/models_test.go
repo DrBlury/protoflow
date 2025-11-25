@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/message"
+
+	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
 )
 
 func TestHandlerStatsCollectsExtendedMetrics(t *testing.T) {
@@ -16,8 +18,8 @@ func TestHandlerStatsCollectsExtendedMetrics(t *testing.T) {
 	}, stats, nil)
 
 	msg := message.NewMessage("id", []byte("demo"))
-	msg.Metadata.Set(metadataKeyQueueDepth, "42")
-	msg.Metadata.Set(metadataKeyEnqueuedAt, time.Now().Add(-1500*time.Millisecond).Format(time.RFC3339Nano))
+	msg.Metadata.Set(handlerpkg.MetadataKeyQueueDepth, "42")
+	msg.Metadata.Set(handlerpkg.MetadataKeyEnqueuedAt, time.Now().Add(-1500*time.Millisecond).Format(time.RFC3339Nano))
 
 	if _, err := instrumented(msg); err == nil {
 		t.Fatalf("expected error from instrumented handler")

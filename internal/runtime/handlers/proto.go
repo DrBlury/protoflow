@@ -59,15 +59,8 @@ func WithPublishMessageTypes(msgs ...proto.Message) ProtoHandlerOption {
 
 // ProtoMessageContext provides strongly typed access to the incoming message payload.
 type ProtoMessageContext[T proto.Message] struct {
-	Payload  T
-	Metadata metadatapkg.Metadata
-	Logger   loggingpkg.ServiceLogger
-}
-
-// CloneMetadata returns a copy of the current metadata map so handlers can safely
-// mutate headers for outgoing events without touching the original map.
-func (c ProtoMessageContext[T]) CloneMetadata() metadatapkg.Metadata {
-	return c.Metadata.Clone()
+	MessageContextBase
+	Payload T
 }
 
 // ProtoMessageOutput describes an event that should be emitted after the handler succeeds.
@@ -105,9 +98,11 @@ func BuildProtoHandler[T proto.Message](prototype T, handler ProtoMessageHandler
 		}
 
 		ctx := ProtoMessageContext[T]{
-			Payload:  typed,
-			Metadata: metadatapkg.FromWatermill(msg.Metadata),
-			Logger:   logger,
+			MessageContextBase: MessageContextBase{
+				Metadata: metadatapkg.FromWatermill(msg.Metadata),
+				Logger:   logger,
+			},
+			Payload: typed,
 		}
 
 		outgoing, err := handler(msg.Context(), ctx)

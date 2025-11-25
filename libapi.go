@@ -32,6 +32,7 @@ type (
 	ProtoMessageContext[T proto.Message]      = handlerpkg.ProtoMessageContext[T]
 	ProtoMessageOutput                        = handlerpkg.ProtoMessageOutput
 	ProtoMessageHandler[T proto.Message]      = handlerpkg.ProtoMessageHandler[T]
+	MessageContextBase                        = handlerpkg.MessageContextBase
 
 	MiddlewareBuilder      = runtimepkg.MiddlewareBuilder
 	MiddlewareRegistration = runtimepkg.MiddlewareRegistration
@@ -48,12 +49,15 @@ type (
 
 	UnprocessableEventError = runtimepkg.UnprocessableEventError
 
-	HandlerInfo  = runtimepkg.HandlerInfo
-	HandlerStats = runtimepkg.HandlerStats
+	HandlerInfo           = runtimepkg.HandlerInfo
+	HandlerStats          = runtimepkg.HandlerStats
+	ConfigValidationError = errspkg.ConfigValidationError
 )
 
 var (
-	NewService = runtimepkg.NewService
+	NewService     = runtimepkg.NewService
+	TryNewService  = runtimepkg.TryNewService
+	ValidateConfig = configpkg.ValidateConfig
 
 	RegisterMessageHandler  = runtimepkg.RegisterMessageHandler
 	WithPublishMessageTypes = handlerpkg.WithPublishMessageTypes
@@ -83,12 +87,25 @@ var (
 	ErrConsumeMessagePointerNeeded = errspkg.ErrConsumeMessagePointerNeeded
 	ErrPublisherRequired           = errspkg.ErrPublisherRequired
 	ErrTopicRequired               = errspkg.ErrTopicRequired
+	ErrConfigRequired              = errspkg.ErrConfigRequired
+	ErrLoggerRequired              = errspkg.ErrLoggerRequired
+	ErrEventPayloadRequired        = errspkg.ErrEventPayloadRequired
 
 	NewSlogServiceLogger = loggingpkg.NewSlogServiceLogger
 
 	NewMetadata = metadatapkg.New
 
 	CreateULID = idspkg.CreateULID
+)
+
+// Metadata keys - use these constants for standard metadata fields.
+const (
+	MetadataKeyCorrelationID = handlerpkg.MetadataKeyCorrelationID
+	MetadataKeyEventSchema   = handlerpkg.MetadataKeyEventSchema
+	MetadataKeyQueueDepth    = handlerpkg.MetadataKeyQueueDepth
+	MetadataKeyEnqueuedAt    = handlerpkg.MetadataKeyEnqueuedAt
+	MetadataKeyTraceID       = handlerpkg.MetadataKeyTraceID
+	MetadataKeySpanID        = handlerpkg.MetadataKeySpanID
 )
 
 func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration[T, O]) error {

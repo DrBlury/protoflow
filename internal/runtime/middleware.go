@@ -3,7 +3,6 @@ package runtime
 import (
 	"errors"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/ThreeDotsLabs/watermill/components/metrics"
@@ -15,6 +14,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
 	idspkg "github.com/drblury/protoflow/internal/runtime/ids"
 	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 )
@@ -216,8 +216,8 @@ func (s *Service) RegisterMiddleware(cfg MiddlewareRegistration) error {
 func (s *Service) correlationIDMiddleware() message.HandlerMiddleware {
 	return func(h message.HandlerFunc) message.HandlerFunc {
 		return func(msg *message.Message) ([]*message.Message, error) {
-			if _, ok := msg.Metadata["correlation_id"]; !ok {
-				msg.Metadata["correlation_id"] = idspkg.CreateULID()
+			if _, ok := msg.Metadata[handlerpkg.MetadataKeyCorrelationID]; !ok {
+				msg.Metadata[handlerpkg.MetadataKeyCorrelationID] = idspkg.CreateULID()
 			}
 			return h(msg)
 		}
@@ -232,11 +232,23 @@ func (s *Service) protoValidateMiddleware() message.HandlerMiddleware {
 		}
 	}
 
+	// Helper to log safely when logger may be nil (e.g., in tests)
+	logDebug := func(msg string, fields loggingpkg.LogFields) {
+		if s.Logger != nil {
+			s.Logger.Debug(msg, fields)
+		}
+	}
+	logError := func(msg string, err error, fields loggingpkg.LogFields) {
+		if s.Logger != nil {
+			s.Logger.Error(msg, err, fields)
+		}
+	}
+
 	return func(h message.HandlerFunc) message.HandlerFunc {
 		return func(msg *message.Message) ([]*message.Message, error) {
-			eventType, ok := msg.Metadata["event_message_schema"]
+			eventType, ok := msg.Metadata[handlerpkg.MetadataKeyEventSchema]
 			if !ok {
-				slog.Warn("missing event_message_schema in metadata")
+				logDebug("missing event_message_schema in metadata", nil)
 				return h(msg)
 			}
 
@@ -244,23 +256,24 @@ func (s *Service) protoValidateMiddleware() message.HandlerMiddleware {
 			newProtoFunc, ok := s.protoRegistry[eventType]
 			s.protoRegistryMu.RUnlock()
 			if !ok {
-				slog.Error("unknown event type", "event_message_schema", eventType)
+				err := fmt.Errorf("unknown event type: %s", eventType)
+				logError("unknown event type", err, loggingpkg.LogFields{"event_message_schema": eventType})
 				return nil, &UnprocessableEventError{
 					eventMessage: string(msg.Payload),
-					err:          fmt.Errorf("unknown event type: %s", eventType),
+					err:          err,
 				}
 			}
 
 			protoMsg := newProtoFunc()
 			if err := protojson.Unmarshal(msg.Payload, protoMsg); err != nil {
-				slog.Error("failed to unmarshal protobuf message", "error", err, "event_message_schema", eventType)
+				logError("failed to unmarshal protobuf message", err, loggingpkg.LogFields{"event_message_schema": eventType})
 				return nil, &UnprocessableEventError{
 					eventMessage: string(msg.Payload),
 					err:          err,
 				}
 			}
 			if err := s.validator.Validate(protoMsg); err != nil {
-				slog.Error("failed to validate protobuf message", "error", err, "event_message_schema", eventType)
+				logError("failed to validate protobuf message", err, loggingpkg.LogFields{"event_message_schema": eventType})
 				return nil, &UnprocessableEventError{
 					eventMessage: string(msg.Payload),
 					err:          err,
