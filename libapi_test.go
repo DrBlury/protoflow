@@ -9,11 +9,11 @@ import (
 )
 
 func TestHandlerExportsPropagateErrors(t *testing.T) {
-	if err := RegisterJSONHandler[*structpb.Struct, *structpb.Struct](nil, JSONHandlerRegistration[*structpb.Struct, *structpb.Struct]{}); !errors.Is(err, ErrServiceRequired) {
+	if err := RegisterJSONHandler(nil, JSONHandlerRegistration[*structpb.Struct, *structpb.Struct]{}); !errors.Is(err, ErrServiceRequired) {
 		t.Fatalf("expected service required error, got %v", err)
 	}
 
-	if err := RegisterProtoHandler[*structpb.Struct](nil, ProtoHandlerRegistration[*structpb.Struct]{}); !errors.Is(err, ErrServiceRequired) {
+	if err := RegisterProtoHandler(nil, ProtoHandlerRegistration[*structpb.Struct]{}); !errors.Is(err, ErrServiceRequired) {
 		t.Fatalf("expected service required error, got %v", err)
 	}
 }

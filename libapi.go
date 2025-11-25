@@ -146,11 +146,11 @@ const (
 )
 
 func RegisterJSONHandler[T any, O any](svc *Service, cfg JSONHandlerRegistration[T, O]) error {
-	return runtimepkg.RegisterJSONHandler[T, O](svc, cfg)
+	return runtimepkg.RegisterJSONHandler(svc, cfg)
 }
 
 func RegisterProtoHandler[T proto.Message](svc *Service, cfg ProtoHandlerRegistration[T]) error {
-	return runtimepkg.RegisterProtoHandler[T](svc, cfg)
+	return runtimepkg.RegisterProtoHandler(svc, cfg)
 }
 
 func NewProtoMessage[T proto.Message]() (T, error) {

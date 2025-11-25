@@ -102,7 +102,7 @@ func TestRegisterProtoMessage(t *testing.T) {
 }
 
 func TestRegisterProtoHandler_ServiceRequired(t *testing.T) {
-	err := RegisterProtoHandler[*structpb.Struct](nil, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{})
+	err := RegisterProtoHandler(nil, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{})
 	if err == nil {
 		t.Fatal("expected error for nil service")
 	}
@@ -111,7 +111,7 @@ func TestRegisterProtoHandler_ServiceRequired(t *testing.T) {
 func TestRegisterProtoHandler_BuildFailure(t *testing.T) {
 	svc := newTestService(t)
 	// BuildProtoHandler fails if handler is nil
-	err := RegisterProtoHandler[*structpb.Struct](svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
+	err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		Name: "test",
 		// Handler is nil
 	})
@@ -123,7 +123,7 @@ func TestRegisterProtoHandler_BuildFailure(t *testing.T) {
 func TestRegisterProtoHandler_RegisterFailure(t *testing.T) {
 	svc := newTestService(t)
 	// registerHandler fails if consume queue is empty
-	err := RegisterProtoHandler[*structpb.Struct](svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
+	err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		Name: "test",
 		// ConsumeQueue is empty
 		Handler: func(ctx context.Context, evt handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
@@ -137,7 +137,7 @@ func TestRegisterProtoHandler_RegisterFailure(t *testing.T) {
 
 func TestRegisterProtoHandler_AdditionalTypes(t *testing.T) {
 	svc := newTestService(t)
-	err := RegisterProtoHandler[*structpb.Struct](svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
+	err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		Name:         "test",
 		ConsumeQueue: "queue",
 		Handler: func(ctx context.Context, evt handlerpkg.ProtoMessageContext[*structpb.Struct]) ([]handlerpkg.ProtoMessageOutput, error) {
@@ -166,7 +166,7 @@ func TestRegisterProtoHandler_Validation(t *testing.T) {
 	svc := newTestService(t)
 	svc.validator = &mockValidator{err: errors.New("invalid")}
 
-	err := RegisterProtoHandler[*structpb.Struct](svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
+	err := RegisterProtoHandler(svc, handlerpkg.ProtoHandlerRegistration[*structpb.Struct]{
 		Name:             "validated",
 		ConsumeQueue:     "queue",
 		ValidateOutgoing: true,
