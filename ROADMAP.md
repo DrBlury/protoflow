@@ -12,8 +12,11 @@ This document outlines the future direction and planned features for the Protofl
 - [x] **NATS**: High-performance messaging
 - [x] **HTTP**: HTTP-based request/response messaging
 - [x] **I/O (File)**: File-based transport for simple message persistence
+- [x] **SQLite**: Lightweight embedded queue for simple deployments with built-in DLQ
+- [x] **PostgreSQL**: Production-ready queue with SKIP LOCKED and DLQ management
 
 ### Middleware
+
 - [x] **Correlation ID**: Automatic request tracing across services
 - [x] **Structured Logging**: Debug logging with metadata
 - [x] **Proto Validation**: Schema validation for protobuf messages
@@ -23,8 +26,10 @@ This document outlines the future direction and planned features for the Protofl
 - [x] **Retry with Backoff**: Configurable exponential backoff
 - [x] **Poison Queue**: Dead letter queue for failed messages
 - [x] **Panic Recovery**: Graceful error handling for panics
+- [x] **Job Hooks**: `OnJobStart`, `OnJobDone`, `OnJobError` callbacks for custom logging, metrics, alerting
 
 ### Core Features
+
 - [x] **Type-Safe Handlers**: Generic `RegisterProtoHandler` and `RegisterJSONHandler`
 - [x] **Service Logger Abstraction**: Pluggable logging (slog, logrus, zerolog, etc.)
 - [x] **Configuration Validation**: Runtime validation with helpful error messages
@@ -33,6 +38,7 @@ This document outlines the future direction and planned features for the Protofl
 - [x] **Custom Transport Factory**: Bring your own message broker
 - [x] **Metadata Propagation**: Automatic metadata handling across handlers
 - [x] **WebUI API**: Handler introspection endpoint with configurable CORS
+- [x] **DLQ Metrics**: Prometheus metrics for dead letter queue monitoring
 
 ---
 
@@ -40,12 +46,11 @@ This document outlines the future direction and planned features for the Protofl
 
 ### Priority 1: Production Readiness
 
-- [ ] **PostgreSQL Transport**: Transactional job queue using PostgreSQL (inspired by [gue](https://github.com/vgarvardt/gue))
-  - Transaction-level locks for exactly-once processing
-  - Built-in migrations
-  - Job scheduling with `RunAt`
-  
-- [ ] **SQLite Transport**: Lightweight embedded queue for simple deployments
+- [x] **PostgreSQL Transport**: Transactional job queue using PostgreSQL
+  - SKIP LOCKED for efficient concurrent consumers
+  - Built-in schema migrations
+  - Job scheduling with delayed messages
+  - Full DLQ management (list, replay, purge)
 
 - [ ] **Rate Limiting Middleware**: Token bucket / sliding window rate limiting
   - Per-handler limits
@@ -59,9 +64,9 @@ This document outlines the future direction and planned features for the Protofl
 
 ### Priority 2: Job Queue Features (inspired by [goqueue](https://github.com/saravanasai/goqueue))
 
-- [ ] **Delayed Jobs**: Schedule jobs to run at a specific time
-  - `DispatchWithDelay(job, duration)`
-  - `DispatchAt(job, time.Time)`
+- [x] **Delayed Jobs**: Schedule jobs to run at a specific time (via SQLite transport)
+  - Set `protoflow_delay` metadata for delayed processing
+  - Supports durations like `30s`, `5m`, `1h`
 
 - [ ] **Job Priorities**: Priority queues for urgent work
   - High/Medium/Low priority levels
@@ -71,15 +76,11 @@ This document outlines the future direction and planned features for the Protofl
   - `WithWorkerCount(n)` option
   - Graceful scaling
 
-- [ ] **Dead Letter Queue Management**
-  - Inspect failed jobs
-  - Replay individual jobs
-  - Bulk replay with filtering
-  - DLQ metrics and alerting
-
-- [ ] **Job Hooks**
-  - `OnJobStart` / `OnJobDone` / `OnJobError`
-  - Custom logging, metrics, alerting
+- [x] **Dead Letter Queue Management** (via SQLite transport)
+  - Inspect failed jobs (`ListDLQMessages`)
+  - Replay individual jobs (`ReplayDLQMessage`)
+  - Bulk replay with filtering (`ReplayAllDLQ`)
+  - DLQ metrics and alerting (`DLQMetrics`)
 
 ### Priority 3: Observability & Operations
 
@@ -135,6 +136,29 @@ Have an idea? Open an issue with the `enhancement` label!
 We welcome contributions! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ### Good First Issues
+
 - Add unit tests for uncovered code paths
 - Improve documentation and examples
 - Add transport-specific integration tests
+
+---
+
+## 📚 Documentation & Examples
+
+The following examples are available in the `examples/` directory:
+
+| Example | Description |
+|---------|-------------|
+| `simple/` | Basic untyped handler with custom retry middleware |
+| `json/` | Type-safe JSON handler with metadata |
+| `proto/` | Type-safe Protobuf handler with validation |
+| `full/` | Complete example with multiple handlers and custom middleware |
+| `hooks/` | Job lifecycle hooks (OnJobStart, OnJobDone, OnJobError) |
+| `sqlite/` | SQLite transport with delayed message scheduling |
+| `postgres/` | PostgreSQL transport with delayed messages and DLQ |
+| `dlq_metrics/` | DLQ metrics collection with Prometheus |
+
+Documentation guides:
+- [Transport Comparison Guide](docs/transports/README.md) - Feature matrix for all transports
+- [Configuration Guide](docs/configuration/README.md) - Transport and middleware configuration
+- [Handlers Guide](docs/handlers/README.md) - Type-safe handler patterns

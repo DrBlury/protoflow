@@ -112,6 +112,9 @@ func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *mes
 		}
 		defer f.Close()
 
+		// Track our position so we can continue reading new content
+		var lastPos int64
+
 		reader := bufio.NewReader(f)
 
 		for {
@@ -122,13 +125,30 @@ func (s *ioSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *mes
 				line, err := reader.ReadBytes('\n')
 				if err != nil {
 					if err == io.EOF {
+						// Get current position and check if file has grown
+						currentPos, _ := f.Seek(0, io.SeekCurrent)
+						// Subtract any buffered but unread data
+						currentPos -= int64(reader.Buffered())
+
+						if currentPos > lastPos {
+							lastPos = currentPos
+						}
+
+						// Wait and then check for new content
+						time.Sleep(50 * time.Millisecond)
+
+						// Seek to our last known position and reset reader
+						f.Seek(lastPos, io.SeekStart)
 						reader.Reset(f)
-						time.Sleep(100 * time.Millisecond)
 						continue
 					}
 					s.logger.Error("Failed to read file", err, nil)
 					return
 				}
+
+				// Update position after successful read
+				currentPos, _ := f.Seek(0, io.SeekCurrent)
+				lastPos = currentPos - int64(reader.Buffered())
 
 				var sm storedMessage
 				if err := json.Unmarshal(line, &sm); err != nil {

@@ -35,6 +35,16 @@ type Config struct {
 	// IOFile is the path to the file used for persistence.
 	IOFile string
 
+	// SQLite configuration.
+	// SQLiteFile is the path to the SQLite database file.
+	// Use ":memory:" for an in-memory database (useful for testing).
+	SQLiteFile string
+
+	// PostgreSQL configuration.
+	// PostgresURL is the PostgreSQL connection string.
+	// Example: "postgres://user:password@localhost:5432/dbname?sslmode=disable"
+	PostgresURL string
+
 	// PoisonQueue receives messages that cannot be processed even after retries.
 	PoisonQueue string
 
@@ -81,6 +91,9 @@ func (c Config) String() string {
 	}
 	if copy.NATSURL != "" {
 		copy.NATSURL = redactURLCredentials(copy.NATSURL)
+	}
+	if copy.PostgresURL != "" {
+		copy.PostgresURL = redactURLCredentials(copy.PostgresURL)
 	}
 	// Use a type alias to avoid infinite recursion when printing
 	type configAlias Config

@@ -3,6 +3,7 @@ package protoflow
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -54,6 +55,28 @@ func TestMetadataExport(t *testing.T) {
 	md := NewMetadata("key", "value")
 	if md["key"] != "value" {
 		t.Fatalf("expected metadata to contain key, got %#v", md)
+	}
+}
+
+func TestWithDelay(t *testing.T) {
+	md := WithDelay(30 * time.Second)
+	if md[MetadataKeyDelay] != "30s" {
+		t.Fatalf("expected delay to be '30s', got %q", md[MetadataKeyDelay])
+	}
+
+	md = WithDelay(5 * time.Minute)
+	if md[MetadataKeyDelay] != "5m0s" {
+		t.Fatalf("expected delay to be '5m0s', got %q", md[MetadataKeyDelay])
+	}
+}
+
+func TestErrorCategoryConstants(t *testing.T) {
+	// Verify error category constants are exported correctly
+	if ErrorCategoryNone != "none" {
+		t.Fatalf("expected ErrorCategoryNone to be 'none', got %q", ErrorCategoryNone)
+	}
+	if ErrorCategoryValidation != "validation" {
+		t.Fatalf("expected ErrorCategoryValidation to be 'validation', got %q", ErrorCategoryValidation)
 	}
 }
 

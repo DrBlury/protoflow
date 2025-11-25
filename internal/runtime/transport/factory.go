@@ -49,7 +49,11 @@ func (defaultFactory) Build(ctx context.Context, conf *config.Config, logger wat
 		return ioTransport(conf, logger)
 	case "http":
 		return httpTransport(conf, logger)
+	case "sqlite":
+		return sqliteTransport(conf, logger)
+	case "postgres", "postgresql":
+		return postgresTransport(conf, logger)
 	default:
-		return Transport{}, fmt.Errorf("unsupported PubSubSystem, must be 'kafka', 'aws', 'rabbitmq', 'nats', 'channel', 'io' or 'http'")
+		return Transport{}, fmt.Errorf("unsupported PubSubSystem, must be 'kafka', 'aws', 'rabbitmq', 'nats', 'channel', 'io', 'http', 'sqlite' or 'postgres'")
 	}
 }

@@ -10,9 +10,15 @@ Welcome to the Protoflow documentation. This is where you'll find detailed guide
   - Using the `ServiceLogger` in handlers
 
 - [**Configuration Guide**](configuration/README.md) ⚙️
-  - Transport configuration (Kafka, RabbitMQ, AWS, NATS, HTTP, IO, Channel)
+  - Transport configuration (Kafka, RabbitMQ, AWS, NATS, HTTP, IO, Channel, SQLite)
   - Middleware customization
   - Dependency injection (validators, outbox stores)
+
+- [**Transport Comparison Guide**](transports/README.md) 🚂
+  - Feature comparison matrix for all transports
+  - Delayed message support details
+  - DLQ capabilities by transport
+  - Use case recommendations
 
 - [**Development Guide**](development/README.md) 🛠️
   - Local development setup
@@ -29,6 +35,7 @@ Welcome to the Protoflow documentation. This is where you'll find detailed guide
 - **NATS**: High-performance messaging
 - **HTTP**: Request/response messaging
 - **File I/O**: Simple file-based persistence
+- **SQLite**: Embedded persistent queue with delayed messages and DLQ management
 
 ### Middleware Stack
 - Correlation ID injection
@@ -40,16 +47,20 @@ Welcome to the Protoflow documentation. This is where you'll find detailed guide
 - Retry with exponential backoff
 - Poison queue (dead letter)
 - Panic recovery
+- **Job lifecycle hooks** (OnJobStart, OnJobDone, OnJobError)
 
 ### Core APIs
 - `NewService` / `TryNewService`: Service creation
 - `RegisterProtoHandler`: Type-safe protobuf handlers
 - `RegisterJSONHandler`: Type-safe JSON handlers
 - `PublishProto`: Direct event publishing
+- `Publish`: Raw message publishing
 - `ServiceLogger`: Pluggable logging abstraction
+- `JobHooksMiddleware`: Job lifecycle hooks
+- `DLQMetrics`: Dead letter queue metrics
 
 ## 🔗 Related Resources
 
-- **`examples/`**: Runnable examples (`simple`, `json`, `proto`, `full`)
+- **`examples/`**: Runnable examples (`simple`, `json`, `proto`, `full`, `hooks`, `sqlite`, `dlq_metrics`)
 - **`internal/runtime/`**: Implementation source code
 - **[ROADMAP.md](../ROADMAP.md)**: Future development plans

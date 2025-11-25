@@ -202,6 +202,26 @@ func (s *Service) getResourceTracker() *resourceTracker {
 	return s.resourceTracker
 }
 
+// Publish sends a raw Watermill message to the specified topic.
+// Use PublishProto for type-safe proto message publishing.
+func (s *Service) Publish(ctx context.Context, topic string, msgs ...*message.Message) error {
+	if s == nil {
+		return errspkg.ErrServiceRequired
+	}
+	if s.publisher == nil {
+		return errspkg.ErrPublisherRequired
+	}
+	if topic == "" {
+		return errspkg.ErrTopicRequired
+	}
+	for _, msg := range msgs {
+		if ctx != nil {
+			msg.SetContext(ctx)
+		}
+	}
+	return s.publisher.Publish(topic, msgs...)
+}
+
 func (s *Service) RegisterHTTPHandler(port int, pattern string, handler http.Handler) {
 	s.httpServersMu.Lock()
 	defer s.httpServersMu.Unlock()

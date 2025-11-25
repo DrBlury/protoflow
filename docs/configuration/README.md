@@ -114,6 +114,32 @@ cfg := &protoflow.Config{
 }
 ```
 
+### SQLite (`"sqlite"`)
+
+Embedded database transport with delayed message support and built-in DLQ management.
+
+| Field | Purpose |
+|:------|:--------|
+| `SQLiteFile` | Path to SQLite database file (use `:memory:` for in-memory) |
+
+```go
+cfg := &protoflow.Config{
+    PubSubSystem: "sqlite",
+    SQLiteFile:   "/var/lib/myapp/queue.db",
+    PoisonQueue:  "failed.messages",
+}
+```
+
+**Delayed Messages:** SQLite supports scheduling messages for future processing:
+
+```go
+msg := message.NewMessage(protoflow.CreateULID(), payload)
+msg.Metadata.Set("protoflow_delay", "30s")  // Process after 30 seconds
+msg.Metadata.Set("protoflow_delay", "5m")   // Process after 5 minutes
+```
+
+**Note:** See [Transport Comparison Guide](../transports/README.md) for detailed feature comparison.
+
 ## Common Configuration
 
 | Field | Description |
