@@ -20,6 +20,7 @@ import (
 	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 	transportpkg "github.com/drblury/protoflow/internal/runtime/transport"
 	awstransport "github.com/drblury/protoflow/transport/aws"
+	channeltransport "github.com/drblury/protoflow/transport/channel"
 	kafkatransport "github.com/drblury/protoflow/transport/kafka"
 	rabbitmqtransport "github.com/drblury/protoflow/transport/rabbitmq"
 	"google.golang.org/protobuf/proto"
@@ -35,6 +36,7 @@ func newTestLogger() loggingpkg.ServiceLogger {
 }
 
 func TestNewServiceConfiguresKafka(t *testing.T) {
+	kafkatransport.Register() // Register the transport before testing
 
 	origPub := kafkatransport.PublisherFactory
 	origSub := kafkatransport.SubscriberFactory
@@ -85,6 +87,8 @@ func TestNewServiceConfiguresKafka(t *testing.T) {
 }
 
 func TestNewService_MiddlewareBuilderError(t *testing.T) {
+	channeltransport.Register() // Register the transport before testing
+
 	defer func() {
 		if r := recover(); r == nil {
 			t.Errorf("The code did not panic")
@@ -107,6 +111,7 @@ func TestNewService_MiddlewareBuilderError(t *testing.T) {
 }
 
 func TestNewServiceConfiguresRabbitMQ(t *testing.T) {
+	rabbitmqtransport.Register() // Register the transport before testing
 
 	origConn := rabbitmqtransport.ConnectionFactory
 	origPub := rabbitmqtransport.PublisherFactory
@@ -160,6 +165,7 @@ func TestNewServiceConfiguresRabbitMQ(t *testing.T) {
 }
 
 func TestNewServiceConfiguresAWS(t *testing.T) {
+	awstransport.Register() // Register the transport before testing
 
 	origLoader := awstransport.DefaultConfigLoader
 	origTopic := awstransport.TopicResolverFactory
@@ -226,6 +232,8 @@ func TestNewServicePanicsWhenFactoryFails(t *testing.T) {
 }
 
 func TestNewServicePanicsWhenRouterFails(t *testing.T) {
+	kafkatransport.Register() // Register the transport before testing
+
 	// This is hard to test because message.NewRouter only fails if logger is nil or config is invalid,
 	// but we control those. However, we can simulate a panic in middleware registration.
 	logger := newTestLogger()
