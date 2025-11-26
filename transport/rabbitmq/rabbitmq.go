@@ -39,7 +39,7 @@ func Build(ctx context.Context, cfg transport.Config, logger watermill.LoggerAda
 
 	amqpConfig := amqp.NewDurablePubSubConfig(
 		url,
-		amqp.GenerateQueueNameTopicNameWithSuffix("-queueSuffix"),
+		amqp.GenerateQueueNameTopicName,
 	)
 
 	conn, err := ConnectionFactory(amqp.ConnectionConfig{

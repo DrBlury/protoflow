@@ -136,13 +136,13 @@ func createPublisher(cfg transport.Config, logger watermill.LoggerAdapter, awsCf
 	return PublisherFactory(publisherConfig, logger)
 }
 
-func makeSqsQueueNameGenerator(subscriberName string) func(context.Context, sns.TopicArn) (string, error) {
+func makeSqsQueueNameGenerator() func(context.Context, sns.TopicArn) (string, error) {
 	return func(ctx context.Context, snsTopic sns.TopicArn) (string, error) {
 		topic, err := sns.ExtractTopicNameFromTopicArn(snsTopic)
 		if err != nil {
 			return "", err
 		}
-		return fmt.Sprintf("%v-%v", topic, subscriberName), nil
+		return string(topic), nil
 	}
 }
 
@@ -153,8 +153,6 @@ func createSubscriber(cfg transport.Config, logger watermill.LoggerAdapter, awsC
 		return nil, err
 	}
 
-	name := "subscriber"
-
 	var snsOpts []func(*amazonsns.Options)
 	var sqsOpts []func(*amazonsqs.Options)
 	snsOpts, sqsOpts, err = addEndpointResolver(cfg, awsCfg, snsOpts, sqsOpts)
@@ -163,12 +161,10 @@ func createSubscriber(cfg transport.Config, logger watermill.LoggerAdapter, awsC
 	}
 
 	subscriberConfig := sns.SubscriberConfig{
-		AWSConfig: aws.Config{
-			Credentials: aws.AnonymousCredentials{},
-		},
+		AWSConfig:            *awsCfg,
 		OptFns:               snsOpts,
 		TopicResolver:        topicResolver,
-		GenerateSqsQueueName: makeSqsQueueNameGenerator(name),
+		GenerateSqsQueueName: makeSqsQueueNameGenerator(),
 	}
 
 	return SubscriberFactory(
