@@ -3,15 +3,34 @@
 package transports
 
 import (
-	// Import all transports for side-effect registration
-	_ "github.com/drblury/protoflow/transport/aws"
-	_ "github.com/drblury/protoflow/transport/channel"
-	_ "github.com/drblury/protoflow/transport/http"
-	_ "github.com/drblury/protoflow/transport/io"
-	_ "github.com/drblury/protoflow/transport/jetstream"
-	_ "github.com/drblury/protoflow/transport/kafka"
-	_ "github.com/drblury/protoflow/transport/nats"
-	_ "github.com/drblury/protoflow/transport/postgres"
-	_ "github.com/drblury/protoflow/transport/rabbitmq"
-	_ "github.com/drblury/protoflow/transport/sqlite"
+	"github.com/drblury/protoflow/transport/aws"
+	"github.com/drblury/protoflow/transport/channel"
+	"github.com/drblury/protoflow/transport/http"
+	"github.com/drblury/protoflow/transport/io"
+	"github.com/drblury/protoflow/transport/jetstream"
+	"github.com/drblury/protoflow/transport/kafka"
+	"github.com/drblury/protoflow/transport/nats"
+	"github.com/drblury/protoflow/transport/postgres"
+	"github.com/drblury/protoflow/transport/rabbitmq"
+	"github.com/drblury/protoflow/transport/sqlite"
 )
+
+// Register registers all built-in transports with the default registry.
+// This is called automatically via init() when this package is imported.
+func Register() {
+	aws.Register()
+	channel.Register()
+	http.Register()
+	io.Register()
+	jetstream.Register()
+	kafka.Register()
+	nats.Register()
+	postgres.Register()
+	rabbitmq.Register()
+	sqlite.Register()
+}
+
+//nolint:gochecknoinits // This is the single entry point for transport registration
+func init() {
+	Register()
+}

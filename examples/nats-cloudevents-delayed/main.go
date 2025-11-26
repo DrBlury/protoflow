@@ -69,7 +69,13 @@ func main() {
 }
 
 func registerHandlers(svc *protoflow.Service, logger protoflow.ServiceLogger) {
-	// Handler for order.created events
+	registerOrderCreatedHandler(svc, logger)
+	registerPaymentInitiatedHandler(svc, logger)
+	registerNotificationHandler(svc, logger)
+	registerProblematicHandler(svc, logger)
+}
+
+func registerOrderCreatedHandler(svc *protoflow.Service, logger protoflow.ServiceLogger) {
 	err := svc.ConsumeEvents("order.created", func(ctx context.Context, evt protoflow.Event) error {
 		logger.Info("Processing order.created event", protoflow.LogFields{
 			"event_id":   evt.ID,
@@ -116,9 +122,10 @@ func registerHandlers(svc *protoflow.Service, logger protoflow.ServiceLogger) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to register order.created handler: %v", err))
 	}
+}
 
-	// Handler for payment.initiated events
-	err = svc.ConsumeEvents("payment.initiated", func(ctx context.Context, evt protoflow.Event) error {
+func registerPaymentInitiatedHandler(svc *protoflow.Service, logger protoflow.ServiceLogger) {
+	err := svc.ConsumeEvents("payment.initiated", func(ctx context.Context, evt protoflow.Event) error {
 		logger.Info("Processing payment.initiated event", protoflow.LogFields{
 			"event_id":   evt.ID,
 			"event_type": evt.Type,
@@ -144,9 +151,10 @@ func registerHandlers(svc *protoflow.Service, logger protoflow.ServiceLogger) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to register payment.initiated handler: %v", err))
 	}
+}
 
-	// Handler for delayed notifications
-	err = svc.ConsumeEvents("notification.scheduled", func(ctx context.Context, evt protoflow.Event) error {
+func registerNotificationHandler(svc *protoflow.Service, logger protoflow.ServiceLogger) {
+	err := svc.ConsumeEvents("notification.scheduled", func(ctx context.Context, evt protoflow.Event) error {
 		logger.Info("Processing scheduled notification", protoflow.LogFields{
 			"event_id":   evt.ID,
 			"event_type": evt.Type,
@@ -157,9 +165,10 @@ func registerHandlers(svc *protoflow.Service, logger protoflow.ServiceLogger) {
 	if err != nil {
 		panic(fmt.Sprintf("failed to register notification.scheduled handler: %v", err))
 	}
+}
 
-	// Handler for events that should go to DLQ
-	err = svc.ConsumeEvents("order.problematic", func(ctx context.Context, evt protoflow.Event) error {
+func registerProblematicHandler(svc *protoflow.Service, logger protoflow.ServiceLogger) {
+	err := svc.ConsumeEvents("order.problematic", func(ctx context.Context, evt protoflow.Event) error {
 		logger.Info("This handler always fails for demonstration", protoflow.LogFields{
 			"event_id": evt.ID,
 			"attempt":  protoflow.GetAttempt(evt),

@@ -21,7 +21,10 @@ var Factory = func(cfg gochannel.Config, logger watermill.LoggerAdapter) (messag
 	return pubSub, pubSub
 }
 
-func init() {
+// Register registers the channel transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.ChannelCapabilities)
 }
 

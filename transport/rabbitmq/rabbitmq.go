@@ -29,7 +29,10 @@ var SubscriberFactory = func(cfg amqp.Config, logger watermill.LoggerAdapter, co
 	return amqp.NewSubscriberWithConnection(cfg, logger, conn)
 }
 
-func init() {
+// Register registers the RabbitMQ transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.RabbitMQCapabilities)
 }
 

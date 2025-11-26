@@ -24,7 +24,10 @@ var SubscriberFactory = func(cfg kafka.SubscriberConfig, logger watermill.Logger
 	return kafka.NewSubscriber(cfg, logger)
 }
 
-func init() {
+// Register registers the Kafka transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.KafkaCapabilities)
 }
 

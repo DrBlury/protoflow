@@ -30,7 +30,10 @@ const (
 	MetadataDelay = "pf_delay_ms"
 )
 
-func init() {
+// Register registers the JetStream transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.NATSJetStreamCapabilities)
 }
 
@@ -261,61 +264,98 @@ func (t *Transport) fetchMessages(ctx context.Context, sub *nats.Subscription, o
 	defer close(output)
 
 	for {
-		select {
-		case <-ctx.Done():
+		if t.shouldStop(ctx) {
 			return
-		case <-t.closedChan:
-			return
-		default:
 		}
 
 		msgs, err := sub.Fetch(10, nats.MaxWait(time.Second))
 		if err != nil {
-			if err == nats.ErrTimeout {
-				continue
-			}
-			if t.logger != nil {
-				t.logger.Error("Failed to fetch messages", err, watermill.LogFields{
-					"topic": topic,
-				})
-			}
+			t.handleFetchError(err, topic)
 			continue
 		}
 
 		for _, natsMsg := range msgs {
-			if delayUntilStr := natsMsg.Header.Get("pf_delay_until"); delayUntilStr != "" {
-				delayUntil, err := strconv.ParseInt(delayUntilStr, 10, 64)
-				if err == nil && time.Now().UnixMilli() < delayUntil {
-					remainingDelay := time.Duration(delayUntil-time.Now().UnixMilli()) * time.Millisecond
-					if err := natsMsg.NakWithDelay(remainingDelay); err != nil {
-						if t.logger != nil {
-							t.logger.Error("Failed to NAK delayed message", err, nil)
-						}
-					}
-					continue
-				}
+			if t.handleDelayedMessage(natsMsg) {
+				continue
 			}
-
-			wmMsg := t.natsToWatermill(natsMsg)
-
-			select {
-			case output <- wmMsg:
-				select {
-				case <-wmMsg.Acked():
-					if err := natsMsg.Ack(); err != nil && t.logger != nil {
-						t.logger.Error("Failed to ack", err, nil)
-					}
-				case <-wmMsg.Nacked():
-					if err := natsMsg.Nak(); err != nil && t.logger != nil {
-						t.logger.Error("Failed to nak", err, nil)
-					}
-				case <-ctx.Done():
-					return
-				}
-			case <-ctx.Done():
+			if !t.processMessage(ctx, natsMsg, output) {
 				return
 			}
 		}
+	}
+}
+
+// shouldStop checks if the fetch loop should terminate.
+func (t *Transport) shouldStop(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	case <-t.closedChan:
+		return true
+	default:
+		return false
+	}
+}
+
+// handleFetchError logs fetch errors (except timeout which is normal).
+func (t *Transport) handleFetchError(err error, topic string) {
+	if err == nats.ErrTimeout {
+		return
+	}
+	if t.logger != nil {
+		t.logger.Error("Failed to fetch messages", err, watermill.LogFields{
+			"topic": topic,
+		})
+	}
+}
+
+// handleDelayedMessage checks if a message should be delayed and NAKs it if so.
+// Returns true if the message was delayed (caller should skip processing).
+func (t *Transport) handleDelayedMessage(natsMsg *nats.Msg) bool {
+	delayUntilStr := natsMsg.Header.Get("pf_delay_until")
+	if delayUntilStr == "" {
+		return false
+	}
+	delayUntil, err := strconv.ParseInt(delayUntilStr, 10, 64)
+	if err != nil || time.Now().UnixMilli() >= delayUntil {
+		return false
+	}
+	remainingDelay := time.Duration(delayUntil-time.Now().UnixMilli()) * time.Millisecond
+	if err := natsMsg.NakWithDelay(remainingDelay); err != nil && t.logger != nil {
+		t.logger.Error("Failed to NAK delayed message", err, nil)
+	}
+	return true
+}
+
+// processMessage converts and sends a NATS message to the output channel.
+// Returns false if context was cancelled (caller should return).
+func (t *Transport) processMessage(ctx context.Context, natsMsg *nats.Msg, output chan<- *message.Message) bool {
+	wmMsg := t.natsToWatermill(natsMsg)
+
+	select {
+	case output <- wmMsg:
+		return t.waitForAck(ctx, natsMsg, wmMsg)
+	case <-ctx.Done():
+		return false
+	}
+}
+
+// waitForAck waits for message acknowledgment and handles it.
+// Returns false if context was cancelled.
+func (t *Transport) waitForAck(ctx context.Context, natsMsg *nats.Msg, wmMsg *message.Message) bool {
+	select {
+	case <-wmMsg.Acked():
+		if err := natsMsg.Ack(); err != nil && t.logger != nil {
+			t.logger.Error("Failed to ack", err, nil)
+		}
+		return true
+	case <-wmMsg.Nacked():
+		if err := natsMsg.Nak(); err != nil && t.logger != nil {
+			t.logger.Error("Failed to nak", err, nil)
+		}
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 
@@ -366,7 +406,7 @@ func (t *Transport) Close() error {
 
 	t.subMu.Lock()
 	for _, sub := range t.subscriptions {
-		sub.Unsubscribe()
+		_ = sub.Unsubscribe() // Error intentionally ignored during cleanup
 	}
 	t.subscriptions = make(map[string]*nats.Subscription)
 	t.subMu.Unlock()

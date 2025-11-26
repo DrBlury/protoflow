@@ -32,7 +32,10 @@ var SubscriberFactory = func(filePath string, logger watermill.LoggerAdapter) (m
 	return &Subscriber{filePath: filePath, logger: logger}, nil
 }
 
-func init() {
+// Register registers the I/O transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.IOCapabilities)
 }
 

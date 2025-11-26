@@ -24,7 +24,10 @@ var SubscriberFactory = func(cfg nats.SubscriberConfig, logger watermill.LoggerA
 	return nats.NewSubscriber(cfg, logger)
 }
 
-func init() {
+// Register registers the NATS transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.NATSCapabilities)
 }
 

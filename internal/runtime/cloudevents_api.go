@@ -195,7 +195,7 @@ func (s *Service) ConsumeEvents(eventType string, handler EventHandler) error {
 
 	wmHandler := s.wrapCloudEventsHandler(eventType, handler)
 
-	s.router.AddNoPublisherHandler(
+	s.router.AddConsumerHandler(
 		handlerName,
 		eventType, // topic = event type
 		s.subscriber,

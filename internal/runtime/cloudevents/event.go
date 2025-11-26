@@ -320,21 +320,20 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		return err
 	}
 
-	// Known CloudEvents attributes
-	knownAttrs := map[string]bool{
-		"specversion":     true,
-		"type":            true,
-		"source":          true,
-		"id":              true,
-		"time":            true,
-		"datacontenttype": true,
-		"dataschema":      true,
-		"subject":         true,
-		"data":            true,
-		"data_base64":     true,
+	// Parse required and optional attributes
+	if err := e.unmarshalRequiredAttrs(m); err != nil {
+		return err
 	}
+	if err := e.unmarshalOptionalAttrs(m); err != nil {
+		return err
+	}
+	e.unmarshalExtensions(m)
 
-	// Parse required attributes
+	return nil
+}
+
+// unmarshalRequiredAttrs parses required CloudEvents attributes.
+func (e *Event) unmarshalRequiredAttrs(m map[string]json.RawMessage) error {
 	if raw, ok := m["specversion"]; ok {
 		if err := json.Unmarshal(raw, &e.SpecVersion); err != nil {
 			return fmt.Errorf("invalid specversion: %w", err)
@@ -355,22 +354,15 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 			return fmt.Errorf("invalid id: %w", err)
 		}
 	}
+	return nil
+}
 
-	// Parse optional attributes
+// unmarshalOptionalAttrs parses optional CloudEvents attributes.
+func (e *Event) unmarshalOptionalAttrs(m map[string]json.RawMessage) error {
 	if raw, ok := m["time"]; ok {
-		var timeStr string
-		if err := json.Unmarshal(raw, &timeStr); err != nil {
-			return fmt.Errorf("invalid time: %w", err)
+		if err := e.unmarshalTime(raw); err != nil {
+			return err
 		}
-		t, err := time.Parse(time.RFC3339Nano, timeStr)
-		if err != nil {
-			// Try RFC3339
-			t, err = time.Parse(time.RFC3339, timeStr)
-			if err != nil {
-				return fmt.Errorf("invalid time format: %w", err)
-			}
-		}
-		e.Time = t
 	}
 	if raw, ok := m["datacontenttype"]; ok {
 		var v string
@@ -407,8 +399,46 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		e.DataBase64 = &v
 	}
+	return nil
+}
 
-	// Everything else goes into extensions
+// unmarshalTime parses the time attribute with fallback formats.
+func (e *Event) unmarshalTime(raw json.RawMessage) error {
+	var timeStr string
+	if err := json.Unmarshal(raw, &timeStr); err != nil {
+		return fmt.Errorf("invalid time: %w", err)
+	}
+	t, err := time.Parse(time.RFC3339Nano, timeStr)
+	if err != nil {
+		// Try RFC3339
+		t, err = time.Parse(time.RFC3339, timeStr)
+		if err != nil {
+			return fmt.Errorf("invalid time format: %w", err)
+		}
+	}
+	e.Time = t
+	return nil
+}
+
+// knownCloudEventsAttrs returns the set of known CloudEvents attribute names.
+func knownCloudEventsAttrs() map[string]bool {
+	return map[string]bool{
+		"specversion":     true,
+		"type":            true,
+		"source":          true,
+		"id":              true,
+		"time":            true,
+		"datacontenttype": true,
+		"dataschema":      true,
+		"subject":         true,
+		"data":            true,
+		"data_base64":     true,
+	}
+}
+
+// unmarshalExtensions parses extension attributes (anything not a known attribute).
+func (e *Event) unmarshalExtensions(m map[string]json.RawMessage) {
+	knownAttrs := knownCloudEventsAttrs()
 	e.Extensions = make(map[string]any)
 	for k, raw := range m {
 		if knownAttrs[k] {
@@ -416,10 +446,9 @@ func (e *Event) UnmarshalJSON(data []byte) error {
 		}
 		var v any
 		if err := json.Unmarshal(raw, &v); err != nil {
-			return fmt.Errorf("invalid extension %q: %w", k, err)
+			// Skip invalid extensions rather than failing
+			continue
 		}
 		e.Extensions[k] = v
 	}
-
-	return nil
 }

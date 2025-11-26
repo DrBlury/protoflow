@@ -25,7 +25,10 @@ var SubscriberFactory = func(addr string, config http.SubscriberConfig, logger w
 	return http.NewSubscriber(addr, config, logger)
 }
 
-func init() {
+// Register registers the HTTP transport with the default registry.
+// This should be called from an init() function in an importing package,
+// or explicitly before using the transport.
+func Register() {
 	transport.RegisterWithCapabilities(TransportName, Build, transport.HTTPCapabilities)
 }
 
