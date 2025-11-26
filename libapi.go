@@ -4,6 +4,7 @@ import (
 	"time"
 
 	runtimepkg "github.com/drblury/protoflow/internal/runtime"
+	ce "github.com/drblury/protoflow/internal/runtime/cloudevents"
 	configpkg "github.com/drblury/protoflow/internal/runtime/config"
 	errspkg "github.com/drblury/protoflow/internal/runtime/errors"
 	handlerpkg "github.com/drblury/protoflow/internal/runtime/handlers"
@@ -12,6 +13,7 @@ import (
 	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 	metadatapkg "github.com/drblury/protoflow/internal/runtime/metadata"
 	transportpkg "github.com/drblury/protoflow/internal/runtime/transport"
+	newtransport "github.com/drblury/protoflow/transport"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -67,6 +69,24 @@ type (
 	// Error classification
 	ErrorClassifier = runtimepkg.ErrorClassifier
 	ErrorCategory   = runtimepkg.ErrorCategory
+
+	// CloudEvents types
+	Event                          = ce.Event
+	EventHandler                   = runtimepkg.EventHandler
+	PublishOption                  = runtimepkg.PublishOption
+	CloudEventsHandlerRegistration = runtimepkg.CloudEventsHandlerRegistration
+
+	// Transport capabilities
+	Capabilities = transportpkg.Capabilities
+
+	// Modular transport types (new package structure)
+	TransportBuilder         = newtransport.Builder
+	TransportConfig          = newtransport.Config
+	TransportRegistry        = newtransport.Registry
+	TransportCapabilities    = newtransport.Capabilities
+	TransportDLQManager      = newtransport.DLQManager
+	TransportQueueIntrospect = newtransport.QueueIntrospector
+	TransportDelayedPub      = newtransport.DelayedPublisher
 )
 
 var (
@@ -97,6 +117,76 @@ var (
 	// DLQ metrics
 	NewDLQMetrics = runtimepkg.NewDLQMetrics
 
+	// CloudEvents constructors and helpers
+	NewCloudEvent       = ce.New
+	NewCloudEventWithID = ce.NewWithID
+
+	// CloudEvents extension helpers
+	GetAttempt          = ce.GetAttempt
+	SetAttempt          = ce.SetAttempt
+	GetMaxAttempts      = ce.GetMaxAttempts
+	SetMaxAttempts      = ce.SetMaxAttempts
+	IncrementAttempt    = ce.IncrementAttempt
+	ExceedsMaxAttempts  = ce.ExceedsMaxAttempts
+	GetNextAttemptAt    = ce.GetNextAttemptAt
+	SetNextAttemptAt    = ce.SetNextAttemptAt
+	SetNextAttemptAfter = ce.SetNextAttemptAfter
+	IsDeadLetter        = ce.IsDeadLetter
+	SetDeadLetter       = ce.SetDeadLetter
+	GetOriginalTopic    = ce.GetOriginalTopic
+	SetOriginalTopic    = ce.SetOriginalTopic
+	GetErrorMessage     = ce.GetErrorMessage
+	SetErrorMessage     = ce.SetErrorMessage
+	GetTraceID          = ce.GetTraceID
+	SetTraceID          = ce.SetTraceID
+	GetParentID         = ce.GetParentID
+	SetParentID         = ce.SetParentID
+	GetCorrelationID    = ce.GetCorrelationID
+	SetCorrelationID    = ce.SetCorrelationID
+	GetDelayMs          = ce.GetDelayMs
+	SetDelayMs          = ce.SetDelayMs
+	GetDelay            = ce.GetDelay
+	SetDelay            = ce.SetDelay
+	GetEventVersion     = ce.GetEventVersion
+	SetEventVersion     = ce.SetEventVersion
+	PrepareForRetry     = ce.PrepareForRetry
+	PrepareForDLQ       = ce.PrepareForDLQ
+	DLQTopic            = ce.DLQTopic
+	CopyTracingContext  = ce.CopyTracingContext
+
+	// CloudEvents error types
+	ErrRetry                = ce.ErrRetry
+	ErrDeadLetter           = ce.ErrDeadLetter
+	ErrSkip                 = ce.ErrSkip
+	ErrUnprocessable        = ce.ErrUnprocessable
+	ErrRetryAfter           = ce.ErrRetryAfter
+	ErrDeadLetterWithReason = ce.ErrDeadLetterWithReason
+	ClassifyError           = ce.ClassifyError
+	IsRetryable             = ce.IsRetryable
+	ShouldDeadLetter        = ce.ShouldDeadLetter
+
+	// CloudEvents API
+	RegisterCloudEventsHandler = runtimepkg.RegisterCloudEventsHandler
+
+	// Transport capabilities
+	GetCapabilities = transportpkg.GetCapabilities
+
+	// Modular transport registry (new package structure)
+	// Use RegisterTransport and BuildTransport to work with the modular transport packages.
+	// Import individual transports via: _ "github.com/drblury/protoflow/transport/kafka"
+	DefaultTransportRegistry = newtransport.DefaultRegistry
+	RegisterTransport        = newtransport.Register
+	BuildTransport           = newtransport.Build
+
+	// Publish options
+	WithSubject         = runtimepkg.WithSubject
+	WithDataContentType = runtimepkg.WithDataContentType
+	WithDataSchema      = runtimepkg.WithDataSchema
+	WithExtension       = runtimepkg.WithExtension
+	WithMaxAttempts     = runtimepkg.WithMaxAttempts
+	WithTracing         = runtimepkg.WithTracing
+	WithCorrelationID   = runtimepkg.WithCorrelationID
+
 	Marshal       = jsoncodec.Marshal
 	MarshalIndent = jsoncodec.MarshalIndent
 	Unmarshal     = jsoncodec.Unmarshal
@@ -120,6 +210,9 @@ var (
 	NewMetadata = metadatapkg.New
 
 	CreateULID = idspkg.CreateULID
+
+	// NewEventID generates a unique event ID using ULID.
+	NewEventID = runtimepkg.NewEventID
 )
 
 // Metadata keys - use these constants for standard metadata fields.
@@ -134,6 +227,42 @@ const (
 	// MetadataKeyDelay is used by SQLite and PostgreSQL transports for delayed message processing.
 	// Set to a duration string like "30s", "5m", "1h".
 	MetadataKeyDelay = "protoflow_delay"
+)
+
+// CloudEvents extension keys for protoflow reliability semantics.
+const (
+	// ExtAttempt is the current retry attempt number (1-based).
+	ExtAttempt = ce.ExtAttempt
+
+	// ExtMaxAttempts is the maximum number of retry attempts allowed.
+	ExtMaxAttempts = ce.ExtMaxAttempts
+
+	// ExtNextAttemptAt is the RFC3339 timestamp for the next retry.
+	ExtNextAttemptAt = ce.ExtNextAttemptAt
+
+	// ExtDeadLetter indicates the event has been moved to DLQ.
+	ExtDeadLetter = ce.ExtDeadLetter
+
+	// ExtTraceID is the distributed trace ID (W3C traceparent compatible).
+	ExtTraceID = ce.ExtTraceID
+
+	// ExtParentID is the parent span ID for trace correlation.
+	ExtParentID = ce.ExtParentID
+
+	// ExtDelayMs is the delay in milliseconds before processing.
+	ExtDelayMs = ce.ExtDelayMs
+
+	// ExtEventVersion is an optional version number for the event schema.
+	ExtEventVersion = ce.ExtEventVersion
+
+	// ExtOriginalTopic stores the original topic when moved to DLQ.
+	ExtOriginalTopic = ce.ExtOriginalTopic
+
+	// ExtErrorMessage stores the last error message when moved to DLQ.
+	ExtErrorMessage = ce.ExtErrorMessage
+
+	// ExtCorrelationID is a correlation identifier for request tracing.
+	ExtCorrelationID = ce.ExtCorrelationID
 )
 
 // Error category constants for ErrorClassifier.

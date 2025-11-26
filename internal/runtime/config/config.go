@@ -76,6 +76,23 @@ type Config struct {
 	WebUICORSAllowedOrigins []string
 }
 
+// Getter methods to implement transport.Config interface.
+func (c *Config) GetPubSubSystem() string       { return c.PubSubSystem }
+func (c *Config) GetKafkaBrokers() []string     { return c.KafkaBrokers }
+func (c *Config) GetKafkaConsumerGroup() string { return c.KafkaConsumerGroup }
+func (c *Config) GetRabbitMQURL() string        { return c.RabbitMQURL }
+func (c *Config) GetNATSURL() string            { return c.NATSURL }
+func (c *Config) GetHTTPServerAddress() string  { return c.HTTPServerAddress }
+func (c *Config) GetHTTPPublisherURL() string   { return c.HTTPPublisherURL }
+func (c *Config) GetIOFile() string             { return c.IOFile }
+func (c *Config) GetSQLiteFile() string         { return c.SQLiteFile }
+func (c *Config) GetPostgresURL() string        { return c.PostgresURL }
+func (c *Config) GetAWSRegion() string          { return c.AWSRegion }
+func (c *Config) GetAWSAccountID() string       { return c.AWSAccountID }
+func (c *Config) GetAWSAccessKeyID() string     { return c.AWSAccessKeyID }
+func (c *Config) GetAWSSecretAccessKey() string { return c.AWSSecretAccessKey }
+func (c *Config) GetAWSEndpoint() string        { return c.AWSEndpoint }
+
 func (c Config) String() string {
 	// Create a copy to avoid modifying the original
 	copy := c

@@ -1,4 +1,5 @@
-package transport
+// Package sqlite provides a SQLite-based transport for protoflow.
+package sqlite
 
 import (
 	"context"
@@ -12,18 +13,47 @@ import (
 	"github.com/ThreeDotsLabs/watermill/message"
 	_ "github.com/mattn/go-sqlite3" // SQLite driver
 
-	"github.com/drblury/protoflow/internal/runtime/config"
+	"github.com/drblury/protoflow/transport"
 )
+
+// TransportName is the name used to register this transport.
+const TransportName = "sqlite"
 
 const (
-	// DefaultSQLitePollInterval is the default interval for polling new messages.
-	DefaultSQLitePollInterval = 100 * time.Millisecond
-	// DefaultSQLiteMaxRetries is the default number of retries before moving to DLQ.
-	DefaultSQLiteMaxRetries = 3
+	// DefaultPollInterval is the default interval for polling new messages.
+	DefaultPollInterval = 100 * time.Millisecond
+	// DefaultMaxRetries is the default number of retries before moving to DLQ.
+	DefaultMaxRetries = 3
 )
 
-// SQLiteConfig holds SQLite-specific configuration.
-type SQLiteConfig struct {
+func init() {
+	transport.RegisterWithCapabilities(TransportName, Build, transport.SQLiteCapabilities)
+}
+
+// Build creates a new SQLite transport.
+func Build(ctx context.Context, cfg transport.Config, logger watermill.LoggerAdapter) (transport.Transport, error) {
+	config := Config{
+		FilePath: cfg.GetSQLiteFile(),
+	}
+
+	t, err := New(config, logger)
+	if err != nil {
+		return transport.Transport{}, err
+	}
+
+	return transport.Transport{
+		Publisher:  t,
+		Subscriber: t,
+	}, nil
+}
+
+// Capabilities returns the capabilities of this transport.
+func Capabilities() transport.Capabilities {
+	return transport.SQLiteCapabilities
+}
+
+// Config holds SQLite-specific configuration.
+type Config struct {
 	// FilePath is the path to the SQLite database file.
 	// Use ":memory:" for an in-memory database (useful for testing).
 	FilePath string
@@ -33,23 +63,23 @@ type SQLiteConfig struct {
 	MaxRetries int
 }
 
-func (c SQLiteConfig) withDefaults() SQLiteConfig {
+func (c Config) withDefaults() Config {
 	if c.FilePath == "" {
 		c.FilePath = "protoflow_queue.db"
 	}
 	if c.PollInterval <= 0 {
-		c.PollInterval = DefaultSQLitePollInterval
+		c.PollInterval = DefaultPollInterval
 	}
 	if c.MaxRetries < 0 {
-		c.MaxRetries = DefaultSQLiteMaxRetries
+		c.MaxRetries = DefaultMaxRetries
 	}
 	return c
 }
 
-// SQLiteTransport implements both Publisher and Subscriber interfaces for SQLite.
-type SQLiteTransport struct {
+// Transport implements both Publisher and Subscriber interfaces for SQLite.
+type Transport struct {
 	db     *sql.DB
-	config SQLiteConfig
+	config Config
 	logger watermill.LoggerAdapter
 
 	subscriptions map[string]chan *message.Message
@@ -61,8 +91,8 @@ type SQLiteTransport struct {
 	wg         sync.WaitGroup
 }
 
-// NewSQLiteTransport creates a new SQLite-based transport.
-func NewSQLiteTransport(cfg SQLiteConfig, logger watermill.LoggerAdapter) (*SQLiteTransport, error) {
+// New creates a new SQLite-based transport.
+func New(cfg Config, logger watermill.LoggerAdapter) (*Transport, error) {
 	cfg = cfg.withDefaults()
 
 	db, err := sql.Open("sqlite3", cfg.FilePath+"?_journal_mode=WAL&_busy_timeout=5000")
@@ -70,11 +100,10 @@ func NewSQLiteTransport(cfg SQLiteConfig, logger watermill.LoggerAdapter) (*SQLi
 		return nil, fmt.Errorf("failed to open SQLite database: %w", err)
 	}
 
-	// Set connection pool settings for better concurrency
-	db.SetMaxOpenConns(1) // SQLite doesn't support concurrent writes well
+	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
 
-	t := &SQLiteTransport{
+	t := &Transport{
 		db:            db,
 		config:        cfg,
 		logger:        logger,
@@ -90,7 +119,7 @@ func NewSQLiteTransport(cfg SQLiteConfig, logger watermill.LoggerAdapter) (*SQLi
 	return t, nil
 }
 
-func (t *SQLiteTransport) initSchema() error {
+func (t *Transport) initSchema() error {
 	schema := `
 	CREATE TABLE IF NOT EXISTS messages (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,7 +155,7 @@ func (t *SQLiteTransport) initSchema() error {
 }
 
 // Publish publishes a message to the specified topic.
-func (t *SQLiteTransport) Publish(topic string, messages ...*message.Message) error {
+func (t *Transport) Publish(topic string, messages ...*message.Message) error {
 	t.closedMu.RLock()
 	if t.closed {
 		t.closedMu.RUnlock()
@@ -162,7 +191,6 @@ func (t *SQLiteTransport) Publish(topic string, messages ...*message.Message) er
 		}
 
 		availableAt := time.Now().UTC()
-		// Support delayed messages via metadata
 		if delayStr := msg.Metadata.Get("protoflow_delay"); delayStr != "" {
 			if delay, err := time.ParseDuration(delayStr); err == nil {
 				availableAt = availableAt.Add(delay)
@@ -183,7 +211,7 @@ func (t *SQLiteTransport) Publish(topic string, messages ...*message.Message) er
 }
 
 // Subscribe subscribes to messages from the specified topic.
-func (t *SQLiteTransport) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
+func (t *Transport) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
 	t.closedMu.RLock()
 	if t.closed {
 		t.closedMu.RUnlock()
@@ -203,7 +231,7 @@ func (t *SQLiteTransport) Subscribe(ctx context.Context, topic string) (<-chan *
 	return msgChan, nil
 }
 
-func (t *SQLiteTransport) pollMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
+func (t *Transport) pollMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
 	defer t.wg.Done()
 	defer close(msgChan)
 
@@ -222,7 +250,6 @@ func (t *SQLiteTransport) pollMessages(ctx context.Context, topic string, msgCha
 	}
 }
 
-// fetchedMessage holds the data for a fetched message before it's sent.
 type fetchedMessage struct {
 	id       int64
 	uuid     string
@@ -230,9 +257,7 @@ type fetchedMessage struct {
 	metadata string
 }
 
-// fetchAndLockMessage attempts to fetch and lock a single message from the queue.
-// Returns the fetched message data and whether a message was found.
-func (t *SQLiteTransport) fetchAndLockMessage(ctx context.Context, topic string) (*fetchedMessage, bool) {
+func (t *Transport) fetchAndLockMessage(ctx context.Context, topic string) (*fetchedMessage, bool) {
 	tx, err := t.db.BeginTx(ctx, nil)
 	if err != nil {
 		if t.logger != nil {
@@ -287,8 +312,7 @@ func (t *SQLiteTransport) fetchAndLockMessage(ctx context.Context, topic string)
 	return &fm, true
 }
 
-// handleMessageResult waits for ack/nack and handles the message accordingly.
-func (t *SQLiteTransport) handleMessageResult(ctx context.Context, id int64, topic string, msg *message.Message) {
+func (t *Transport) handleMessageResult(ctx context.Context, id int64, topic string, msg *message.Message) {
 	select {
 	case <-msg.Acked():
 		t.ackMessage(id)
@@ -301,7 +325,7 @@ func (t *SQLiteTransport) handleMessageResult(ctx context.Context, id int64, top
 	}
 }
 
-func (t *SQLiteTransport) processAvailableMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
+func (t *Transport) processAvailableMessages(ctx context.Context, topic string, msgChan chan *message.Message) {
 	fm, found := t.fetchAndLockMessage(ctx, topic)
 	if !found {
 		return
@@ -327,15 +351,14 @@ func (t *SQLiteTransport) processAvailableMessages(ctx context.Context, topic st
 	}
 }
 
-func (t *SQLiteTransport) ackMessage(id int64) {
+func (t *Transport) ackMessage(id int64) {
 	_, err := t.db.Exec(`DELETE FROM messages WHERE id = ?`, id)
 	if err != nil && t.logger != nil {
 		t.logger.Error("failed to ack message", err, nil)
 	}
 }
 
-func (t *SQLiteTransport) nackMessage(id int64, topic string) {
-	// Check retry count and potentially move to DLQ
+func (t *Transport) nackMessage(id int64, topic string) {
 	var retryCount int
 	err := t.db.QueryRow(`SELECT retry_count FROM messages WHERE id = ?`, id).Scan(&retryCount)
 	if err != nil {
@@ -346,7 +369,6 @@ func (t *SQLiteTransport) nackMessage(id int64, topic string) {
 	}
 
 	if retryCount >= t.config.MaxRetries {
-		// Move to dead letter queue
 		_, err = t.db.Exec(`
 			INSERT INTO dead_letter_queue (uuid, original_topic, payload, metadata, error_message, retry_count)
 			SELECT uuid, topic, payload, metadata, 'max retries exceeded', retry_count
@@ -356,14 +378,12 @@ func (t *SQLiteTransport) nackMessage(id int64, topic string) {
 			t.logger.Error("failed to move message to DLQ", err, nil)
 		}
 
-		// Delete from main queue
 		_, err = t.db.Exec(`DELETE FROM messages WHERE id = ?`, id)
 		if err != nil && t.logger != nil {
 			t.logger.Error("failed to delete message after DLQ move", err, nil)
 		}
 	} else {
-		// Increment retry count and unlock for retry with backoff
-		backoffSeconds := 1 * (retryCount + 1) // Linear backoff: 1s, 2s, 3s...
+		backoffSeconds := 1 * (retryCount + 1)
 		availableAt := time.Now().UTC().Add(time.Duration(backoffSeconds) * time.Second)
 		_, err = t.db.Exec(`
 			UPDATE messages
@@ -378,7 +398,7 @@ func (t *SQLiteTransport) nackMessage(id int64, topic string) {
 	}
 }
 
-func (t *SQLiteTransport) unlockMessage(id int64) {
+func (t *Transport) unlockMessage(id int64) {
 	_, err := t.db.Exec(`UPDATE messages SET locked_until = NULL WHERE id = ?`, id)
 	if err != nil && t.logger != nil {
 		t.logger.Error("failed to unlock message", err, nil)
@@ -386,7 +406,7 @@ func (t *SQLiteTransport) unlockMessage(id int64) {
 }
 
 // Close closes the transport and releases resources.
-func (t *SQLiteTransport) Close() error {
+func (t *Transport) Close() error {
 	t.closedMu.Lock()
 	if t.closed {
 		t.closedMu.Unlock()
@@ -399,23 +419,24 @@ func (t *SQLiteTransport) Close() error {
 	t.wg.Wait()
 
 	t.subMu.Lock()
-	for _, ch := range t.subscriptions {
-		// Channels are closed by pollMessages goroutine
-		_ = ch
-	}
 	t.subscriptions = nil
 	t.subMu.Unlock()
 
 	return t.db.Close()
 }
 
+// GetCapabilities returns the capabilities of this transport instance.
+func (t *Transport) GetCapabilities() transport.Capabilities {
+	return transport.SQLiteCapabilities
+}
+
 // GetDB returns the underlying database connection for advanced use cases.
-func (t *SQLiteTransport) GetDB() *sql.DB {
+func (t *Transport) GetDB() *sql.DB {
 	return t.db
 }
 
 // GetPendingCount returns the number of pending messages for a topic.
-func (t *SQLiteTransport) GetPendingCount(topic string) (int64, error) {
+func (t *Transport) GetPendingCount(topic string) (int64, error) {
 	var count int64
 	err := t.db.QueryRow(`
 		SELECT COUNT(*) FROM messages
@@ -425,7 +446,7 @@ func (t *SQLiteTransport) GetPendingCount(topic string) (int64, error) {
 }
 
 // GetDLQCount returns the number of messages in the dead letter queue for a topic.
-func (t *SQLiteTransport) GetDLQCount(topic string) (int64, error) {
+func (t *Transport) GetDLQCount(topic string) (int64, error) {
 	var count int64
 	err := t.db.QueryRow(`
 		SELECT COUNT(*) FROM dead_letter_queue
@@ -435,7 +456,7 @@ func (t *SQLiteTransport) GetDLQCount(topic string) (int64, error) {
 }
 
 // ReplayDLQMessage moves a message from DLQ back to the main queue.
-func (t *SQLiteTransport) ReplayDLQMessage(dlqID int64) error {
+func (t *Transport) ReplayDLQMessage(dlqID int64) error {
 	tx, err := t.db.Begin()
 	if err != nil {
 		return err
@@ -466,7 +487,7 @@ func (t *SQLiteTransport) ReplayDLQMessage(dlqID int64) error {
 }
 
 // ReplayAllDLQ moves all messages from DLQ back to the main queue for a topic.
-func (t *SQLiteTransport) ReplayAllDLQ(topic string) (int64, error) {
+func (t *Transport) ReplayAllDLQ(topic string) (int64, error) {
 	tx, err := t.db.Begin()
 	if err != nil {
 		return 0, err
@@ -499,7 +520,7 @@ func (t *SQLiteTransport) ReplayAllDLQ(topic string) (int64, error) {
 }
 
 // PurgeDLQ removes all messages from the dead letter queue for a topic.
-func (t *SQLiteTransport) PurgeDLQ(topic string) (int64, error) {
+func (t *Transport) PurgeDLQ(topic string) (int64, error) {
 	result, err := t.db.Exec(`DELETE FROM dead_letter_queue WHERE original_topic = ?`, topic)
 	if err != nil {
 		return 0, err
@@ -508,7 +529,7 @@ func (t *SQLiteTransport) PurgeDLQ(topic string) (int64, error) {
 }
 
 // ListDLQMessages returns messages from the dead letter queue with pagination.
-func (t *SQLiteTransport) ListDLQMessages(topic string, limit, offset int) ([]DLQMessage, error) {
+func (t *Transport) ListDLQMessages(topic string, limit, offset int) ([]transport.DLQMessage, error) {
 	rows, err := t.db.Query(`
 		SELECT id, uuid, original_topic, payload, metadata, error_message, failed_at, retry_count
 		FROM dead_letter_queue
@@ -521,9 +542,9 @@ func (t *SQLiteTransport) ListDLQMessages(topic string, limit, offset int) ([]DL
 	}
 	defer rows.Close()
 
-	var messages []DLQMessage
+	var messages []transport.DLQMessage
 	for rows.Next() {
-		var msg DLQMessage
+		var msg transport.DLQMessage
 		var metadataStr string
 		if err := rows.Scan(&msg.ID, &msg.UUID, &msg.OriginalTopic, &msg.Payload, &metadataStr, &msg.ErrorMessage, &msg.FailedAt, &msg.RetryCount); err != nil {
 			return nil, err
@@ -538,33 +559,4 @@ func (t *SQLiteTransport) ListDLQMessages(topic string, limit, offset int) ([]DL
 		messages = append(messages, msg)
 	}
 	return messages, rows.Err()
-}
-
-// DLQMessage represents a message in the dead letter queue.
-type DLQMessage struct {
-	ID            int64             `json:"id"`
-	UUID          string            `json:"uuid"`
-	OriginalTopic string            `json:"original_topic"`
-	Payload       []byte            `json:"payload"`
-	Metadata      map[string]string `json:"metadata"`
-	ErrorMessage  string            `json:"error_message"`
-	FailedAt      time.Time         `json:"failed_at"`
-	RetryCount    int               `json:"retry_count"`
-}
-
-// sqliteTransport builds a SQLite transport from config.
-func sqliteTransport(conf *config.Config, logger watermill.LoggerAdapter) (Transport, error) {
-	cfg := SQLiteConfig{
-		FilePath: conf.SQLiteFile,
-	}
-
-	transport, err := NewSQLiteTransport(cfg, logger)
-	if err != nil {
-		return Transport{}, err
-	}
-
-	return Transport{
-		Publisher:  transport,
-		Subscriber: transport,
-	}, nil
 }

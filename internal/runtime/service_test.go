@@ -19,6 +19,9 @@ import (
 	configpkg "github.com/drblury/protoflow/internal/runtime/config"
 	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 	transportpkg "github.com/drblury/protoflow/internal/runtime/transport"
+	awstransport "github.com/drblury/protoflow/transport/aws"
+	kafkatransport "github.com/drblury/protoflow/transport/kafka"
+	rabbitmqtransport "github.com/drblury/protoflow/transport/rabbitmq"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -33,21 +36,21 @@ func newTestLogger() loggingpkg.ServiceLogger {
 
 func TestNewServiceConfiguresKafka(t *testing.T) {
 
-	origPub := transportpkg.KafkaPublisherFactory
-	origSub := transportpkg.KafkaSubscriberFactory
+	origPub := kafkatransport.PublisherFactory
+	origSub := kafkatransport.SubscriberFactory
 	t.Cleanup(func() {
-		transportpkg.KafkaPublisherFactory = origPub
-		transportpkg.KafkaSubscriberFactory = origSub
+		kafkatransport.PublisherFactory = origPub
+		kafkatransport.SubscriberFactory = origSub
 	})
 	recordedPublishConfigs := 0
 	recordedSubscribeConfigs := 0
 	pub := &testPublisher{}
 	sub := &testSubscriber{}
-	transportpkg.KafkaPublisherFactory = func(config kafka.PublisherConfig, _ watermill.LoggerAdapter) (message.Publisher, error) {
+	kafkatransport.PublisherFactory = func(config kafka.PublisherConfig, _ watermill.LoggerAdapter) (message.Publisher, error) {
 		recordedPublishConfigs++
 		return pub, nil
 	}
-	transportpkg.KafkaSubscriberFactory = func(config kafka.SubscriberConfig, _ watermill.LoggerAdapter) (message.Subscriber, error) {
+	kafkatransport.SubscriberFactory = func(config kafka.SubscriberConfig, _ watermill.LoggerAdapter) (message.Subscriber, error) {
 		recordedSubscribeConfigs++
 		if config.ConsumerGroup != "group" {
 			t.Fatalf("unexpected consumer group: %s", config.ConsumerGroup)
@@ -105,17 +108,17 @@ func TestNewService_MiddlewareBuilderError(t *testing.T) {
 
 func TestNewServiceConfiguresRabbitMQ(t *testing.T) {
 
-	origConn := transportpkg.AmqpConnectionFactory
-	origPub := transportpkg.AmqpPublisherFactory
-	origSub := transportpkg.AmqpSubscriberFactory
+	origConn := rabbitmqtransport.ConnectionFactory
+	origPub := rabbitmqtransport.PublisherFactory
+	origSub := rabbitmqtransport.SubscriberFactory
 	t.Cleanup(func() {
-		transportpkg.AmqpConnectionFactory = origConn
-		transportpkg.AmqpPublisherFactory = origPub
-		transportpkg.AmqpSubscriberFactory = origSub
+		rabbitmqtransport.ConnectionFactory = origConn
+		rabbitmqtransport.PublisherFactory = origPub
+		rabbitmqtransport.SubscriberFactory = origSub
 	})
 
 	connCalls := 0
-	transportpkg.AmqpConnectionFactory = func(config amqp.ConnectionConfig, _ watermill.LoggerAdapter) (*amqp.ConnectionWrapper, error) {
+	rabbitmqtransport.ConnectionFactory = func(config amqp.ConnectionConfig, _ watermill.LoggerAdapter) (*amqp.ConnectionWrapper, error) {
 		connCalls++
 		if config.AmqpURI != "amqp://guest:guest@localhost" {
 			t.Fatalf("unexpected amqp uri: %s", config.AmqpURI)
@@ -125,13 +128,13 @@ func TestNewServiceConfiguresRabbitMQ(t *testing.T) {
 
 	pub := &testPublisher{}
 	sub := &testSubscriber{}
-	transportpkg.AmqpPublisherFactory = func(cfg amqp.Config, _ watermill.LoggerAdapter, conn *amqp.ConnectionWrapper) (message.Publisher, error) {
+	rabbitmqtransport.PublisherFactory = func(cfg amqp.Config, _ watermill.LoggerAdapter, conn *amqp.ConnectionWrapper) (message.Publisher, error) {
 		if conn == nil {
 			t.Fatal("expected connection to be provided")
 		}
 		return pub, nil
 	}
-	transportpkg.AmqpSubscriberFactory = func(cfg amqp.Config, _ watermill.LoggerAdapter, conn *amqp.ConnectionWrapper) (message.Subscriber, error) {
+	rabbitmqtransport.SubscriberFactory = func(cfg amqp.Config, _ watermill.LoggerAdapter, conn *amqp.ConnectionWrapper) (message.Subscriber, error) {
 		if conn == nil {
 			t.Fatal("expected connection to be provided")
 		}
@@ -158,33 +161,33 @@ func TestNewServiceConfiguresRabbitMQ(t *testing.T) {
 
 func TestNewServiceConfiguresAWS(t *testing.T) {
 
-	origLoader := transportpkg.AWSDefaultConfigLoader
-	origTopic := transportpkg.SNSTopicResolverFactory
-	origPub := transportpkg.SNSPublisherFactory
-	origSub := transportpkg.SNSSubscriberFactory
+	origLoader := awstransport.DefaultConfigLoader
+	origTopic := awstransport.TopicResolverFactory
+	origPub := awstransport.PublisherFactory
+	origSub := awstransport.SubscriberFactory
 	t.Cleanup(func() {
-		transportpkg.AWSDefaultConfigLoader = origLoader
-		transportpkg.SNSTopicResolverFactory = origTopic
-		transportpkg.SNSPublisherFactory = origPub
-		transportpkg.SNSSubscriberFactory = origSub
+		awstransport.DefaultConfigLoader = origLoader
+		awstransport.TopicResolverFactory = origTopic
+		awstransport.PublisherFactory = origPub
+		awstransport.SubscriberFactory = origSub
 	})
 
-	transportpkg.AWSDefaultConfigLoader = func(ctx context.Context, optFns ...func(*awsconfig.LoadOptions) error) (aws.Config, error) {
+	awstransport.DefaultConfigLoader = func(ctx context.Context, optFns ...func(*awsconfig.LoadOptions) error) (aws.Config, error) {
 		return aws.Config{Region: "initial"}, nil
 	}
 
 	pub := &testPublisher{}
 	sub := &testSubscriber{}
-	transportpkg.SNSTopicResolverFactory = func(accountID, region string) (*sns.GenerateArnTopicResolver, error) {
+	awstransport.TopicResolverFactory = func(accountID, region string) (*sns.GenerateArnTopicResolver, error) {
 		if accountID != "123456789012" {
 			t.Fatalf("unexpected account id: %s", accountID)
 		}
 		return origTopic(accountID, region)
 	}
-	transportpkg.SNSPublisherFactory = func(cfg sns.PublisherConfig, _ watermill.LoggerAdapter) (message.Publisher, error) {
+	awstransport.PublisherFactory = func(cfg sns.PublisherConfig, _ watermill.LoggerAdapter) (message.Publisher, error) {
 		return pub, nil
 	}
-	transportpkg.SNSSubscriberFactory = func(cfg sns.SubscriberConfig, sqsCfg sqs.SubscriberConfig, _ watermill.LoggerAdapter) (message.Subscriber, error) {
+	awstransport.SubscriberFactory = func(cfg sns.SubscriberConfig, sqsCfg sqs.SubscriberConfig, _ watermill.LoggerAdapter) (message.Subscriber, error) {
 		if sqsCfg.AWSConfig.Region != "eu-west-1" {
 			t.Fatalf("unexpected sqs region %s", sqsCfg.AWSConfig.Region)
 		}

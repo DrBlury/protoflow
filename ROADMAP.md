@@ -11,10 +11,27 @@ This document outlines the future direction and planned features for the Protofl
 - [x] **RabbitMQ**: AMQP-based messaging with durable queues
 - [x] **AWS SNS/SQS**: Cloud-native pub/sub with LocalStack support
 - [x] **NATS**: High-performance messaging
+- [x] **NATS JetStream**: Persistent streaming with delayed delivery support
 - [x] **HTTP**: HTTP-based request/response messaging
 - [x] **I/O (File)**: File-based transport for simple message persistence
 - [x] **SQLite**: Lightweight embedded queue for simple deployments with built-in DLQ
 - [x] **PostgreSQL**: Production-ready queue with SKIP LOCKED and DLQ management
+
+### Event Model
+
+- [x] **CloudEvents v1.0**: Standardized event format as canonical model
+  - Full CloudEvents v1.0 spec compliance
+  - Watermill message conversion utilities
+  - Protoflow extension attributes for reliability semantics
+
+- [x] **Transport Capabilities**: Introspection API for transport features
+  - `SupportsDelay`, `SupportsNativeDLQ`, `SupportsOrdering`, `SupportsTracing`
+  - Per-transport capability functions
+
+- [x] **Handler Error Types**: Structured error returns for message lifecycle
+  - `ErrRetry` - Retry with backoff
+  - `ErrRetryAfter(duration)` - Retry after specific delay
+  - `ErrDeadLetter` - Send to dead letter queue
 
 ### Middleware
 
@@ -158,9 +175,16 @@ The following examples are available in the `examples/` directory:
 | `sqlite/` | SQLite transport with delayed message scheduling |
 | `postgres/` | PostgreSQL transport with delayed messages and DLQ |
 | `dlq_metrics/` | DLQ metrics collection with Prometheus |
+| `nats-cloudevents-delayed/` | NATS JetStream with CloudEvents and delayed delivery |
 
 Documentation guides:
 
+- [CloudEvents Model](docs/cloudevents-model.md) - CloudEvents v1.0 integration
+- [Protoflow Extensions](docs/protoflow-extensions.md) - Reliability extension attributes
+- [Transport Capabilities](docs/transport-capabilities.md) - Capability introspection API
+- [OpenTelemetry Tracing](docs/otel-tracing.md) - Distributed tracing integration
+- [AsyncAPI Integration](docs/asyncapi-integration.md) - AsyncAPI spec generation
+- [Delayed Delivery Roadmap](docs/roadmap-delayed-delivery.md) - Future delayed delivery plans
 - [Transport Comparison Guide](docs/transports/README.md) - Feature matrix for all transports
 - [Configuration Guide](docs/configuration/README.md) - Transport and middleware configuration
 - [Handlers Guide](docs/handlers/README.md) - Type-safe handler patterns

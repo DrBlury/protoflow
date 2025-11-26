@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  nats:
+    image: nats:latest
+    container_name: protoflow-nats
+    ports:
+      - "4222:4222" # Client connections
+      - "8222:8222" # HTTP monitoring
+    command: ["-js", "-m", "8222"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8222/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+    volumes:
+      - nats-data:/data
+
+  # Optional: NATS CLI for management
+  nats-box:
+    image: natsio/nats-box:latest
+    container_name: protoflow-nats-box
+    depends_on:
+      nats:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    stdin_open: true
+    tty: true
+    environment:
+      - NATS_URL=nats://nats:4222
+
+volumes:
+  nats-data:
