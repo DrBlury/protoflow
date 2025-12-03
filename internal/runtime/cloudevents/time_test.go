@@ -113,10 +113,10 @@ func TestFormatTime_NonUTC(t *testing.T) {
 	require.NoError(t, err)
 	testTime := time.Date(2024, 1, 1, 12, 30, 45, 0, loc)
 	formatted := FormatTime(testTime)
-	
+
 	// Should be in UTC
 	assert.Contains(t, formatted, "Z")
-	
+
 	// Parse it back to verify
 	parsed, err := time.Parse(time.RFC3339, formatted)
 	require.NoError(t, err)

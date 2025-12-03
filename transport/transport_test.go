@@ -45,7 +45,7 @@ func TestDLQMessage_Struct(t *testing.T) {
 func TestConfig_Interface(t *testing.T) {
 	// Test that mockConfig implements Config interface
 	var _ Config = (*mockConfig)(nil)
-	
+
 	cfg := &mockConfig{pubSubSystem: "test"}
 	assert.Equal(t, "test", cfg.GetPubSubSystem())
 }
@@ -59,7 +59,7 @@ func (testProvider) Capabilities() Capabilities {
 func TestCapabilitiesProvider_Interface(t *testing.T) {
 	// Test CapabilitiesProvider interface
 	var _ CapabilitiesProvider = testProvider{}
-	
+
 	provider := testProvider{}
 	caps := provider.Capabilities()
 	assert.Equal(t, "test", caps.Name)
@@ -68,10 +68,10 @@ func TestCapabilitiesProvider_Interface(t *testing.T) {
 // DLQManager interface impl
 type testDLQManager struct{}
 
-func (testDLQManager) GetDLQCount(topic string) (int64, error)         { return 0, nil }
-func (testDLQManager) ReplayDLQMessage(dlqID int64) error              { return nil }
-func (testDLQManager) ReplayAllDLQ(topic string) (int64, error)        { return 0, nil }
-func (testDLQManager) PurgeDLQ(topic string) (int64, error)            { return 0, nil }
+func (testDLQManager) GetDLQCount(topic string) (int64, error)  { return 0, nil }
+func (testDLQManager) ReplayDLQMessage(dlqID int64) error       { return nil }
+func (testDLQManager) ReplayAllDLQ(topic string) (int64, error) { return 0, nil }
+func (testDLQManager) PurgeDLQ(topic string) (int64, error)     { return 0, nil }
 
 // DLQLister interface impl
 type testDLQLister struct{}

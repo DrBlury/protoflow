@@ -10,13 +10,13 @@ func TestGetCapabilities(t *testing.T) {
 	// Test that GetCapabilities returns capabilities for known transports
 	// The actual values come from the registry after the transports register themselves
 	tests := []string{"channel", "kafka", "rabbitmq", "nats", "jetstream", "aws", "http", "io", "sqlite", "postgres"}
-	
+
 	for _, transportName := range tests {
 		t.Run(transportName, func(t *testing.T) {
 			caps := GetCapabilities(transportName)
 			// Just verify we get capabilities back with the name set
 			assert.NotNil(t, caps)
-			// The transport may or may not be registered in tests, 
+			// The transport may or may not be registered in tests,
 			// so we just check the function works
 		})
 	}

@@ -16,14 +16,14 @@ func TestMessageContextBase_Get(t *testing.T) {
 		"key1": "value1",
 		"key2": "value2",
 	}
-	
+
 	logger := loggingpkg.NewSlogServiceLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	
+
 	ctx := MessageContextBase{
 		Metadata: metadata,
 		Logger:   logger,
 	}
-	
+
 	assert.Equal(t, "value1", ctx.Get("key1"))
 	assert.Equal(t, "value2", ctx.Get("key2"))
 	assert.Equal(t, "", ctx.Get("nonexistent"))
@@ -48,9 +48,9 @@ func TestMessageContextBase_CorrelationID(t *testing.T) {
 			want:     "",
 		},
 	}
-	
+
 	logger := loggingpkg.NewSlogServiceLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctx := MessageContextBase{
@@ -67,24 +67,24 @@ func TestMessageContextBase_CloneMetadata(t *testing.T) {
 		"key1": "value1",
 		"key2": "value2",
 	}
-	
+
 	logger := loggingpkg.NewSlogServiceLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	
+
 	ctx := MessageContextBase{
 		Metadata: original,
 		Logger:   logger,
 	}
-	
+
 	cloned := ctx.CloneMetadata()
-	
+
 	// Verify clone has same values
 	assert.Equal(t, "value1", cloned["key1"])
 	assert.Equal(t, "value2", cloned["key2"])
-	
+
 	// Modify clone
 	cloned["key1"] = "modified"
 	cloned["key3"] = "new"
-	
+
 	// Verify original is unchanged
 	assert.Equal(t, "value1", ctx.Metadata["key1"])
 	assert.Equal(t, "", ctx.Metadata["key3"])

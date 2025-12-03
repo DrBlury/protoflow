@@ -172,7 +172,7 @@ func TestGetExtensionBool(t *testing.T) {
 func TestGetExtensionTime(t *testing.T) {
 	evt := New("test.event", "test-source", nil)
 	testTime := time.Now().UTC()
-	
+
 	// Test with time.Time
 	evt.Extensions["time_key"] = testTime
 	value := evt.GetExtensionTime("time_key")
@@ -304,7 +304,7 @@ func TestEventClone(t *testing.T) {
 func TestEventMarshalJSON(t *testing.T) {
 	subject := "test-subject"
 	contentType := "application/json"
-	
+
 	evt := Event{
 		SpecVersion:     SpecVersion,
 		Type:            "test.event",
@@ -377,7 +377,7 @@ func TestEventUnmarshalJSON_MissingRequired(t *testing.T) {
 	err := evt.UnmarshalJSON([]byte(jsonData))
 	// UnmarshalJSON doesn't validate required fields, so no error
 	assert.NoError(t, err)
-	
+
 	// But Validate should catch missing required fields
 	err = evt.Validate()
 	assert.Error(t, err)
@@ -386,7 +386,7 @@ func TestEventUnmarshalJSON_MissingRequired(t *testing.T) {
 func TestEventRoundTrip(t *testing.T) {
 	subject := "test-subject"
 	contentType := "application/json"
-	
+
 	original := Event{
 		SpecVersion:     SpecVersion,
 		Type:            "test.event",

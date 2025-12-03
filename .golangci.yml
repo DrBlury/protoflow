@@ -68,6 +68,10 @@ linters:
       - linters:
           - goconst
         path: (.+)_test\.go
+      - linters:
+          - funlen
+          - gocyclo
+        path: (.+)_test\.go
     paths:
       - third_party$
       - builtin$

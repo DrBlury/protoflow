@@ -30,7 +30,7 @@ func TestDefaultFactory_Build_Channel(t *testing.T) {
 	// being imported and registered via their init() functions. The factory.go file
 	// imports all transports with _ "github.com/drblury/protoflow/transport/..."
 	// which triggers their registration.
-	
+
 	factory := DefaultFactory()
 	ctx := context.Background()
 	cfg := &config.Config{
@@ -39,7 +39,7 @@ func TestDefaultFactory_Build_Channel(t *testing.T) {
 	logger := testLogger()
 
 	transport, err := factory.Build(ctx, cfg, logger)
-	
+
 	// If the transport isn't registered (e.g., in minimal test environment),
 	// this will error. That's okay - we're testing the factory interface.
 	if err != nil {
@@ -47,7 +47,7 @@ func TestDefaultFactory_Build_Channel(t *testing.T) {
 		t.Skipf("Transport not registered in test environment: %v", err)
 		return
 	}
-	
+
 	require.NoError(t, err)
 	assert.NotNil(t, transport.Publisher)
 	assert.NotNil(t, transport.Subscriber)
