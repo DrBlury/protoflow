@@ -9,6 +9,7 @@ vendor/
 
 # Coverage reports
 coverage.out
+coverage_full.out
 coverage/
 *.coverprofile
 

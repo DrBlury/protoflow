@@ -33,6 +33,7 @@ func TestConfigStringRedactsURLCredentials(t *testing.T) {
 	cfg := Config{
 		RabbitMQURL: "amqp://user:secret-password@localhost:5672/",
 		NATSURL:     "nats://admin:nats-secret@localhost:4222",
+		PostgresURL: "postgres://dbuser:dbpass@localhost:5432/mydb",
 	}
 
 	str := cfg.String()
@@ -43,11 +44,17 @@ func TestConfigStringRedactsURLCredentials(t *testing.T) {
 	if strings.Contains(str, "nats-secret") {
 		t.Error("Config.String() should redact NATS password")
 	}
+	if strings.Contains(str, "dbpass") {
+		t.Error("Config.String() should redact Postgres password")
+	}
 	if !strings.Contains(str, "user") {
 		t.Error("Config.String() should preserve username in RabbitMQ URL")
 	}
 	if !strings.Contains(str, "admin") {
 		t.Error("Config.String() should preserve username in NATS URL")
+	}
+	if !strings.Contains(str, "dbuser") {
+		t.Error("Config.String() should preserve username in Postgres URL")
 	}
 }
 
@@ -210,6 +217,16 @@ func TestValidateConfigNil(t *testing.T) {
 	}
 }
 
+func TestValidateConfigValid(t *testing.T) {
+	cfg := &Config{
+		PubSubSystem: "channel",
+	}
+	err := ValidateConfig(cfg)
+	if err != nil {
+		t.Errorf("unexpected error for valid config: %v", err)
+	}
+}
+
 func TestRedactURLCredentials(t *testing.T) {
 	tests := []struct {
 		name             string
@@ -262,5 +279,72 @@ func assertErrorContains(t *testing.T, err error, want string) {
 	}
 	if !strings.Contains(err.Error(), want) {
 		t.Errorf("expected error containing %q, got %q", want, err.Error())
+	}
+}
+
+// Test getter methods
+func TestConfigGetters(t *testing.T) {
+	cfg := Config{
+		PubSubSystem:       "kafka",
+		KafkaBrokers:       []string{"broker1", "broker2"},
+		KafkaConsumerGroup: "test-group",
+		RabbitMQURL:        "amqp://localhost",
+		NATSURL:            "nats://localhost",
+		HTTPServerAddress:  ":8080",
+		HTTPPublisherURL:   "http://localhost:8080",
+		IOFile:             "/tmp/io.log",
+		SQLiteFile:         "/tmp/test.db",
+		PostgresURL:        "postgres://localhost/test",
+		AWSRegion:          "us-east-1",
+		AWSAccountID:       "123456789",
+		AWSAccessKeyID:     "access-key",
+		AWSSecretAccessKey: "secret-key",
+		AWSEndpoint:        "http://localhost:4566",
+	}
+
+	if got := cfg.GetPubSubSystem(); got != "kafka" {
+		t.Errorf("GetPubSubSystem() = %v, want %v", got, "kafka")
+	}
+	if got := cfg.GetKafkaBrokers(); len(got) != 2 || got[0] != "broker1" {
+		t.Errorf("GetKafkaBrokers() = %v, want [broker1, broker2]", got)
+	}
+	if got := cfg.GetKafkaConsumerGroup(); got != "test-group" {
+		t.Errorf("GetKafkaConsumerGroup() = %v, want %v", got, "test-group")
+	}
+	if got := cfg.GetRabbitMQURL(); got != "amqp://localhost" {
+		t.Errorf("GetRabbitMQURL() = %v, want %v", got, "amqp://localhost")
+	}
+	if got := cfg.GetNATSURL(); got != "nats://localhost" {
+		t.Errorf("GetNATSURL() = %v, want %v", got, "nats://localhost")
+	}
+	if got := cfg.GetHTTPServerAddress(); got != ":8080" {
+		t.Errorf("GetHTTPServerAddress() = %v, want %v", got, ":8080")
+	}
+	if got := cfg.GetHTTPPublisherURL(); got != "http://localhost:8080" {
+		t.Errorf("GetHTTPPublisherURL() = %v, want %v", got, "http://localhost:8080")
+	}
+	if got := cfg.GetIOFile(); got != "/tmp/io.log" {
+		t.Errorf("GetIOFile() = %v, want %v", got, "/tmp/io.log")
+	}
+	if got := cfg.GetSQLiteFile(); got != "/tmp/test.db" {
+		t.Errorf("GetSQLiteFile() = %v, want %v", got, "/tmp/test.db")
+	}
+	if got := cfg.GetPostgresURL(); got != "postgres://localhost/test" {
+		t.Errorf("GetPostgresURL() = %v, want %v", got, "postgres://localhost/test")
+	}
+	if got := cfg.GetAWSRegion(); got != "us-east-1" {
+		t.Errorf("GetAWSRegion() = %v, want %v", got, "us-east-1")
+	}
+	if got := cfg.GetAWSAccountID(); got != "123456789" {
+		t.Errorf("GetAWSAccountID() = %v, want %v", got, "123456789")
+	}
+	if got := cfg.GetAWSAccessKeyID(); got != "access-key" {
+		t.Errorf("GetAWSAccessKeyID() = %v, want %v", got, "access-key")
+	}
+	if got := cfg.GetAWSSecretAccessKey(); got != "secret-key" {
+		t.Errorf("GetAWSSecretAccessKey() = %v, want %v", got, "secret-key")
+	}
+	if got := cfg.GetAWSEndpoint(); got != "http://localhost:4566" {
+		t.Errorf("GetAWSEndpoint() = %v, want %v", got, "http://localhost:4566")
 	}
 }
