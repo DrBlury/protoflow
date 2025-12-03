@@ -14,7 +14,6 @@ import (
 	ce "github.com/drblury/protoflow/internal/runtime/cloudevents"
 	configpkg "github.com/drblury/protoflow/internal/runtime/config"
 	errspkg "github.com/drblury/protoflow/internal/runtime/errors"
-	loggingpkg "github.com/drblury/protoflow/internal/runtime/logging"
 	transportpkg "github.com/drblury/protoflow/internal/runtime/transport"
 )
 
@@ -602,49 +601,6 @@ func TestHandleCloudEventsResult(t *testing.T) {
 		assert.Equal(t, 1, len(topics))
 	})
 }
-
-// Helper to create test service for CloudEvents tests
-
-func newCloudEventsTestService(t *testing.T) *Service {
-	t.Helper()
-
-	logger := loggingpkg.NewSlogServiceLogger(newTestSlogLogger())
-	deps := ServiceDependencies{
-		TransportFactory:          &mockTransportFactory{},
-		DisableDefaultMiddlewares: true,
-	}
-	return NewService(&configpkg.Config{PubSubSystem: "channel"}, logger, context.Background(), deps)
-}
-
-// Test publisher that records calls for CloudEvents tests
-
-type ceTestPublisher struct {
-	topic    string
-	messages []*message.Message
-	err      error
-}
-
-func (p *ceTestPublisher) Publish(topic string, messages ...*message.Message) error {
-	if p.err != nil {
-		return p.err
-	}
-	p.topic = topic
-	p.messages = append(p.messages, messages...)
-	return nil
-}
-
-func (p *ceTestPublisher) Close() error { return nil }
-
-// Test subscriber for CloudEvents tests
-
-type ceTestSubscriber struct{}
-
-func (s *ceTestSubscriber) Subscribe(ctx context.Context, topic string) (<-chan *message.Message, error) {
-	ch := make(chan *message.Message)
-	return ch, nil
-}
-
-func (s *ceTestSubscriber) Close() error { return nil }
 
 // Test sendToCloudEventsDLQ
 
