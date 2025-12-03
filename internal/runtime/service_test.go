@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	"github.com/ThreeDotsLabs/watermill"
 	"github.com/ThreeDotsLabs/watermill-amqp/v3/pkg/amqp"
 	"github.com/ThreeDotsLabs/watermill-aws/sns"
@@ -563,4 +564,61 @@ func TestGetErrorClassifier_NilClassifier(t *testing.T) {
 	if classifier == nil {
 		t.Fatal("expected default classifier when nil")
 	}
+}
+
+func TestService_Publish(t *testing.T) {
+t.Run("nil service", func(t *testing.T) {
+var svc *Service
+err := svc.Publish(context.Background(), "test.topic", nil)
+if err == nil {
+t.Fatal("expected error for nil service")
+}
+})
+
+t.Run("nil publisher", func(t *testing.T) {
+svc := &Service{}
+err := svc.Publish(context.Background(), "test.topic", nil)
+if err == nil {
+t.Fatal("expected error for nil publisher")
+}
+})
+
+t.Run("empty topic", func(t *testing.T) {
+svc := &Service{
+publisher: &testPublisher{},
+}
+err := svc.Publish(context.Background(), "", nil)
+if err == nil {
+t.Fatal("expected error for empty topic")
+}
+})
+
+t.Run("successful publish", func(t *testing.T) {
+pub := &testPublisher{}
+svc := &Service{
+publisher: pub,
+}
+msg := message.NewMessage("test-id", []byte("test"))
+err := svc.Publish(context.Background(), "test.topic", msg)
+if err != nil {
+t.Fatalf("unexpected error: %v", err)
+}
+})
+
+t.Run("publishes with context", func(t *testing.T) {
+pub := &testPublisher{}
+svc := &Service{
+publisher: pub,
+}
+ctx := context.Background()
+msg := message.NewMessage("test-id", []byte("test"))
+err := svc.Publish(ctx, "test.topic", msg)
+if err != nil {
+t.Fatalf("unexpected error: %v", err)
+}
+// Message should have context set
+if msg.Context() == nil {
+t.Fatal("expected message to have context set")
+}
+})
 }

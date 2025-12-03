@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -55,5 +56,48 @@ func TestHandlerStatsCollectsExtendedMetrics(t *testing.T) {
 	}
 	if stats.Latency.SampleSize == 0 {
 		t.Fatalf("expected latency metrics to have samples")
+	}
+}
+
+func TestDefaultErrorClassifier(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected ErrorCategory
+	}{
+		{
+			name:     "nil error",
+			err:      nil,
+			expected: ErrorCategoryNone,
+		},
+		{
+			name:     "unprocessable event error",
+			err:      &UnprocessableEventError{eventMessage: "test", err: errors.New("invalid")},
+			expected: ErrorCategoryValidation,
+		},
+		{
+			name:     "context deadline exceeded",
+			err:      context.DeadlineExceeded,
+			expected: ErrorCategoryDownstream,
+		},
+		{
+			name:     "context canceled",
+			err:      context.Canceled,
+			expected: ErrorCategoryDownstream,
+		},
+		{
+			name:     "other error",
+			err:      errors.New("random error"),
+			expected: ErrorCategoryOther,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := defaultErrorClassifier(tt.err)
+			if result != tt.expected {
+				t.Errorf("defaultErrorClassifier(%v) = %v, want %v", tt.err, result, tt.expected)
+			}
+		})
 	}
 }

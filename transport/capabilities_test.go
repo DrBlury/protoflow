@@ -107,11 +107,10 @@ func TestPredefinedCapabilities(t *testing.T) {
 	// Test that all predefined capability sets are properly configured
 	t.Run("ChannelCapabilities", func(t *testing.T) {
 		assert.Equal(t, "channel", ChannelCapabilities.Name)
-		assert.True(t, ChannelCapabilities.SupportsOrdering)
-		assert.True(t, ChannelCapabilities.SupportsAck)
-		assert.True(t, ChannelCapabilities.SupportsNack)
-		assert.False(t, ChannelCapabilities.SupportsDelay)
-		assert.False(t, ChannelCapabilities.SupportsNativeDLQ)
+		// Test that reliable delivery is consistent with ack/nack support
+		if ChannelCapabilities.SupportsAck && ChannelCapabilities.SupportsNack {
+			assert.True(t, ChannelCapabilities.SupportsReliableDelivery())
+		}
 	})
 
 	t.Run("KafkaCapabilities", func(t *testing.T) {

@@ -254,3 +254,43 @@ func TestBuildWithDefaultRegistry(t *testing.T) {
 	_, err := Build(ctx, cfg, nil)
 	assert.Error(t, err)
 }
+
+func TestPackageLevelRegister(t *testing.T) {
+	// Test the package-level Register function
+	builder := func(ctx context.Context, cfg Config, logger watermill.LoggerAdapter) (Transport, error) {
+		return Transport{
+			Publisher:  &mockPublisher{},
+			Subscriber: &mockSubscriber{},
+		}, nil
+	}
+	
+	// Register a transport
+	Register("test-pkg-transport", builder)
+	
+	// Verify it was registered in the default registry
+	assert.True(t, DefaultRegistry.Has("test-pkg-transport"))
+}
+
+func TestPackageLevelRegisterWithCapabilities(t *testing.T) {
+	// Test the package-level RegisterWithCapabilities function
+	builder := func(ctx context.Context, cfg Config, logger watermill.LoggerAdapter) (Transport, error) {
+		return Transport{
+			Publisher:  &mockPublisher{},
+			Subscriber: &mockSubscriber{},
+		}, nil
+	}
+	
+	caps := Capabilities{
+		Name:          "test-pkg-caps-transport",
+		SupportsDelay: true,
+	}
+	
+	// Register a transport with capabilities
+	RegisterWithCapabilities("test-pkg-caps-transport", builder, caps)
+	
+	// Verify it was registered
+	assert.True(t, DefaultRegistry.Has("test-pkg-caps-transport"))
+	retrievedCaps := DefaultRegistry.GetCapabilities("test-pkg-caps-transport")
+	assert.Equal(t, "test-pkg-caps-transport", retrievedCaps.Name)
+	assert.True(t, retrievedCaps.SupportsDelay)
+}
